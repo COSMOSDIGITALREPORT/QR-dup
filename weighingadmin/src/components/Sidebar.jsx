@@ -10,10 +10,8 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import QrCodeIcon from '@mui/icons-material/QrCode';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
 import SettingsIcon from '@mui/icons-material/Settings';
-import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import PeopleIcon from '@mui/icons-material/People';
 import ScaleIcon from '@mui/icons-material/Scale';
-import AssessmentIcon from '@mui/icons-material/Assessment';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 const DRAWER_WIDTH = 256;
@@ -36,9 +34,7 @@ const navGroups = [
     label: 'OPERATIONS',
     items: [
       { label: 'Records',   icon: <ScaleIcon />,                    path: '/records' },
-      { label: 'Machines',  icon: <PrecisionManufacturingIcon />,   path: '/machines' },
       { label: 'Operators', icon: <PeopleIcon />,                   path: '/operators' },
-      { label: 'Reports',   icon: <AssessmentIcon />,               path: '/reports' },
     ],
   },
   // E.7-D — superadminOnly filtered out at render time below (see
