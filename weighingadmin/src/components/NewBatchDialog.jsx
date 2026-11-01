@@ -2,21 +2,13 @@ import { useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Typography, Chip, CircularProgress, Grid,
-  MenuItem, Accordion, AccordionSummary, AccordionDetails,
-  Checkbox, FormControlLabel, Divider,
+  Checkbox, FormControlLabel,
 } from '@mui/material';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { batchAPI } from '../services/api';
-import { BATCH_DETAIL_SECTIONS, BATCH_DETAIL_FIELDS, BATCH_DETAIL_TEXT_MAX, buildBatchDetails } from './batchDetailFields';
 
-// Shared with the Batches page's "New Batch" flow (and Products' "New
-// Batch" button) so there is exactly one implementation of batch creation —
-// same fields, same validation, same POST /api/batches call, same permanent
-// QR generation on the backend. Nothing here creates or fakes a batch on
-// the frontend; the backend remains the sole source of truth.
 const SEED_PRESETS = [
   { label: 'Soyabean',  code: 'SO' },
   { label: 'Wheat',     code: 'WH' },
@@ -27,11 +19,6 @@ const SEED_PRESETS = [
   { label: 'Groundnut', code: 'GN' },
   { label: 'Sunflower', code: 'SF' },
 ];
-
-const WAREHOUSE_OPTIONS = ['Warehouse A', 'Warehouse B', 'Warehouse C'];
-const RACK_OPTIONS      = ['Rack 1', 'Rack 2', 'Rack 3', 'Rack 4'];
-const SHELF_OPTIONS     = ['Shelf 1', 'Shelf 2', 'Shelf 3', 'Shelf 4'];
-const SEED_CATEGORY_OPTIONS = ['Organic', 'Hybrid', 'Open Pollinated', 'Heirloom', 'Conventional'];
 
 export function getSeedCodeForCrop(cropName) {
   if (!cropName || typeof cropName !== 'string') return '';
@@ -58,35 +45,13 @@ export function parseLocation(loc) {
 
 const createInitialEntry = (id = 1) => ({
   id,
-  // Section 1: Crop Name & Seed Code
   cropName: '',
-  seedType: '', // Seed Name
-  seedCode: '', // Seed Code
-  seedCategory: '', // Seed Type
-
-  // Section 2: Location & QR count
-  location: '', // e.g. R - 2 - 24
-  count: '', // Number of QR Codes
-
-  // Batch Identification
-  batchNumber: '',
-  batchCode: '',
-
-  // Storage & Date
-  month: '',
-  year: '',
-  warehouse: '',
-  rack: '',
-  shelf: '',
-
-  // Section 3: Four new fields
+  seedCode: '',
+  location: '',
   previousYear: '',
   previousLocation: '',
   gean: '',
   comments: '',
-
-  // Seed-management details — all optional, all start blank.
-  ...Object.fromEntries(BATCH_DETAIL_FIELDS.map(f => [f.name, ''])),
 });
 
 export default function NewBatchDialog({ open, onClose, onCreated }) {
@@ -97,12 +62,11 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
   const handlePreset = (index, p) => {
     setEntries(prev => {
       const copy = [...prev];
-      const cur = { ...copy[index] };
-      cur.cropName = p.label;
-      cur.seedType = p.label;
-      cur.seedCode = p.code;
-      cur.crop = p.label;
-      copy[index] = cur;
+      copy[index] = {
+        ...copy[index],
+        cropName: p.label,
+        seedCode: p.code,
+      };
       return copy;
     });
   };
@@ -113,59 +77,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
       const cur = { ...copy[index], [name]: value };
 
       if (name === 'cropName') {
-        // Automatically populate Seed Code based on selected/entered Crop Name
         cur.seedCode = getSeedCodeForCrop(value);
-        if (!cur.seedType || SEED_PRESETS.some(p => p.label.toLowerCase() === cur.seedType.toLowerCase())) {
-          cur.seedType = value;
-        }
-        cur.crop = value;
-      }
-
-      if (name === 'seedType') {
-        if (!cur.cropName) {
-          cur.cropName = value;
-        }
-        if (!cur.seedCode) {
-          cur.seedCode = getSeedCodeForCrop(value);
-        }
-      }
-
-      if (name === 'batchNumber') {
-        cur.batchCode = value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-      }
-
-      if (name === 'location') {
-        cur.locationCode = value;
-        const parsed = parseLocation(value);
-        if (parsed) {
-          cur.count = String(parsed.count);
-          if (!cur.batchNumber) {
-            cur.batchNumber = `${parsed.land}-${parsed.line}`;
-            cur.batchCode = `${parsed.land}${parsed.line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-          }
-        }
-      }
-
-      if (name === 'count') {
-        const parsed = parseLocation(cur.location);
-        if (parsed && value) {
-          cur.location = `${parsed.land} - ${parsed.line} - ${value}`;
-          cur.locationCode = cur.location;
-        }
-      }
-
-      if (name === 'previousLocation') {
-        cur.previousLocationCode = value;
-      }
-      if (name === 'previousLocationCode') {
-        cur.previousLocation = value;
-      }
-
-      if (name === 'gean') {
-        cur.gene = value;
-      }
-      if (name === 'gene') {
-        cur.gean = value;
       }
 
       copy[index] = cur;
@@ -192,86 +104,81 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
 
   const handleCreate = async () => {
     setCreateError('');
-    // Validate each entry
+
+    // Validate each crop entry
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       const prefix = entries.length > 1 ? `[Entry #${i + 1}] ` : '';
-      const missing = [];
-      const cropOrSeed = entry.cropName || entry.seedType;
-      if (!cropOrSeed)       missing.push('Crop Name / Seed Name');
-      if (!entry.seedCode)    missing.push('Seed Code');
-      if (!entry.batchNumber) missing.push('Batch Number');
-      if (!entry.batchCode)   missing.push('Batch Code');
-      if (!entry.count)       missing.push('Number of QR Codes / Location count');
-      if (missing.length > 0) {
-        setCreateError(`${prefix}Please fill: ${missing.join(', ')}`);
+      if (!entry.cropName?.trim()) {
+        setCreateError(`${prefix}Please enter Crop Name`);
         return;
       }
-
-      const total = parseInt(entry.count, 10);
-      if (isNaN(total) || total < 1 || total > 5000) {
-        setCreateError(`${prefix}Number of QR Codes must be between 1 and 5000`);
+      if (!entry.seedCode?.trim()) {
+        setCreateError(`${prefix}Please enter Seed Code`);
         return;
       }
-
-      const { error: detailError } = buildBatchDetails({
-        ...entry,
-        crop: entry.cropName || entry.seedType,
-        locationCode: entry.location || entry.locationCode || '',
-        previousLocationCode: entry.previousLocation || entry.previousLocationCode || '',
-        gene: entry.gean || entry.gene || '',
-        comments: entry.comments || '',
-      });
-      if (detailError) {
-        setCreateError(`${prefix}${detailError}`);
+      if (!entry.location?.trim()) {
+        setCreateError(`${prefix}Please enter Location (e.g. R - 2 - 24)`);
         return;
+      }
+      const parsed = parseLocation(entry.location);
+      if (!parsed) {
+        setCreateError(`${prefix}Location must follow format: Land - Line - Count (e.g. R - 2 - 24)`);
+        return;
+      }
+      if (parsed.count < 1 || parsed.count > 5000) {
+        setCreateError(`${prefix}QR count in Location must be between 1 and 5000`);
+        return;
+      }
+      if (entry.previousYear && String(entry.previousYear).trim()) {
+        const py = Number(entry.previousYear);
+        if (!Number.isFinite(py)) {
+          setCreateError(`${prefix}PreviousYear must be a number`);
+          return;
+        }
       }
     }
 
     try {
       setCreating(true);
-      const responses = [];
+      const createdResponses = [];
+
       for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-        const { details } = buildBatchDetails({
-          ...entry,
-          crop: entry.cropName || entry.seedType,
-          locationCode: entry.location || entry.locationCode || '',
-          previousLocationCode: entry.previousLocation || entry.previousLocationCode || '',
-          gene: entry.gean || entry.gene || '',
-          comments: entry.comments || '',
-        });
+        const parsed = parseLocation(entry.location);
+        const land = parsed.land;
+        const line = parsed.line;
+        const count = parsed.count;
+        const batchNum = `${land}-${line}`;
+        const batchCd = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'B1';
+        const sc = entry.seedCode.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'SC';
 
-        const res = await batchAPI.create({
-          batchName:    `${entry.cropName || entry.seedType} ${entry.batchNumber}`,
-          seedType:     entry.seedType || entry.cropName,
-          seedCategory: entry.seedCategory,
-          seedCode:     entry.seedCode,
-          batchNumber:  entry.batchNumber,
-          batchCode:    entry.batchCode,
-          count:        parseInt(entry.count, 10),
-          month:        entry.month,
-          year:         entry.year,
-          warehouse:    entry.warehouse,
-          rack:         entry.rack,
-          shelf:        entry.shelf,
-          ...details,
-          crop:         entry.cropName || entry.seedType,
-          locationCode: entry.location || entry.locationCode || '',
-          previousLocationCode: entry.previousLocation || entry.previousLocationCode || '',
-          gene:         entry.gean || entry.gene || '',
-          comments:     entry.comments || '',
-        });
+        const payload = {
+          batchName: `${entry.cropName.trim()} ${batchNum}`,
+          seedType: entry.cropName.trim(),
+          seedCategory: '',
+          seedCode: sc,
+          batchNumber: batchNum,
+          batchCode: batchCd,
+          count: count,
+          crop: entry.cropName.trim(),
+          locationCode: entry.location.trim(),
+          previousYear: entry.previousYear && String(entry.previousYear).trim() ? Number(entry.previousYear) : null,
+          previousLocationCode: entry.previousLocation?.trim() || '',
+          gene: entry.gean?.trim() || '',
+          comments: entry.comments?.trim() || '',
+        };
 
+        const res = await batchAPI.create(payload);
         if (!res.data.success || !res.data.batch?._id) {
-          throw new Error(res.data.message || `The server did not confirm batch #${i + 1} was saved`);
+          throw new Error(res.data.message || `Failed to create batch for entry #${i + 1}`);
         }
-        responses.push(res.data);
+        createdResponses.push(res.data);
       }
 
       setEntries([createInitialEntry()]);
       setCreateError('');
-      onCreated?.(responses[0]);
+      onCreated?.(createdResponses[0]);
       onClose();
     } catch (err) {
       setCreateError(err.response?.data?.message || err.message || 'Error creating batch');
@@ -280,44 +187,49 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
     }
   };
 
-  const totalCount = entries.reduce((sum, e) => sum + (parseInt(e.count, 10) || 0), 0);
+  // Calculate total QR codes across all entries
+  const totalCount = entries.reduce((sum, e) => {
+    const p = parseLocation(e.location);
+    return sum + (p ? p.count : 0);
+  }, 0);
 
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="md"
+      maxWidth="sm"
       fullWidth
       PaperProps={{ sx: { borderRadius: 3, maxHeight: '92vh' } }}
     >
-      <DialogTitle sx={{ fontWeight: 800, fontSize: 18, borderBottom: '1px solid #e2e8f0' }}>
+      <DialogTitle sx={{ fontWeight: 800, fontSize: 18 }}>
         Create New Batch
       </DialogTitle>
-      <DialogContent sx={{ pt: 2.5 }}>
+      <DialogContent sx={{ pt: 1 }}>
         {entries.map((entry, index) => {
-          const parsedLoc = parseLocation(entry.location);
-          const previewId = entry.seedCode && entry.batchCode && entry.count
-            ? `PRD-${entry.seedCode}${entry.batchCode}-001  →  PRD-${entry.seedCode}${entry.batchCode}-${String(entry.count).padStart(3, '0')}`
+          const parsed = parseLocation(entry.location);
+          const sc = entry.seedCode ? entry.seedCode.toUpperCase().replace(/[^A-Z0-9]/g, '') : '';
+          const bc = parsed ? `${parsed.land}${parsed.line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
+          const previewPrd = sc && bc && parsed
+            ? `PRD-${sc}${bc}-001  →  PRD-${sc}${bc}-${String(parsed.count).padStart(3, '0')}`
             : null;
 
           return (
             <Box
               key={entry.id || index}
               sx={{
-                p: entries.length > 1 ? 2.5 : 0,
-                mb: entries.length > 1 ? 3 : 1.5,
+                p: entries.length > 1 ? 2 : 0,
+                mb: entries.length > 1 ? 2.5 : 1,
                 borderRadius: 2.5,
-                border: entries.length > 1 ? '1px solid #cbd5e1' : 'none',
-                background: entries.length > 1 ? '#ffffff' : 'transparent',
-                boxShadow: entries.length > 1 ? '0 1px 3px rgba(0,0,0,0.05)' : 'none',
+                border: entries.length > 1 ? '1px solid #e2e8f0' : 'none',
+                background: entries.length > 1 ? '#f8fafc' : 'transparent',
               }}
             >
               {entries.length > 1 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, pb: 1, borderBottom: '1px solid #f1f5f9' }}>
-                  <Typography sx={{ fontWeight: 800, fontSize: 14, color: '#1a227f', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, pb: 0.8, borderBottom: '1px solid #e2e8f0' }}>
+                  <Typography sx={{ fontWeight: 800, fontSize: 13.5, color: '#1a227f', display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{
-                      width: 24, height: 24, borderRadius: '50%',
-                      background: '#1a227f', color: '#fff', fontSize: 12,
+                      width: 22, height: 22, borderRadius: '50%',
+                      background: '#1a227f', color: '#fff', fontSize: 11,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
                     }}>
                       {index + 1}
@@ -329,20 +241,20 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     color="error"
                     startIcon={<DeleteOutlineIcon />}
                     onClick={() => handleRemoveEntry(index)}
-                    sx={{ fontSize: 12, textTransform: 'none', fontWeight: 600 }}
+                    sx={{ fontSize: 11.5, textTransform: 'none', fontWeight: 600 }}
                   >
-                    Remove Form
+                    Remove
                   </Button>
                 </Box>
               )}
 
               {/* Crop Name Quick Select chips */}
               <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', mb: 1, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Crop Name Quick Select
+                Quick Select
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.7, mb: 2.5 }}>
                 {SEED_PRESETS.map(p => {
-                  const isSelected = (entry.cropName === p.label) || (entry.seedCode === p.code);
+                  const isSelected = (entry.cropName?.toLowerCase() === p.label.toLowerCase()) || (entry.seedCode === p.code);
                   return (
                     <Chip
                       key={p.code}
@@ -362,8 +274,8 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
               </Box>
 
               <Grid container spacing={2}>
-                {/* 1. Crop Name & Auto Seed Code */}
-                <Grid size={{ xs: 12, sm: 8 }}>
+                {/* 1. Crop Name & Seed Code */}
+                <Grid size={{ xs: 8 }}>
                   <TextField
                     fullWidth
                     label="Crop Name"
@@ -374,7 +286,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     placeholder="e.g. Soyabean"
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 4 }}>
                   <TextField
                     fullWidth
                     label="Seed Code"
@@ -387,47 +299,8 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                   />
                 </Grid>
 
-                {/* Existing Seed Name & Seed Type */}
-                <Grid size={{ xs: 12, sm: 8 }}>
-                  <TextField
-                    fullWidth
-                    label="Seed Name"
-                    name="seedType"
-                    value={entry.seedType}
-                    onChange={(e) => handleEntryChange(index, 'seedType', e.target.value)}
-                    size="small"
-                    placeholder="e.g. Soybean JS-335"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    select
-                    fullWidth
-                    name="seedCategory"
-                    value={entry.seedCategory}
-                    onChange={(e) => handleEntryChange(index, 'seedCategory', e.target.value)}
-                    size="small"
-                    SelectProps={{
-                      displayEmpty: true,
-                      MenuProps: {
-                        PaperProps: {
-                          sx: {
-                            mt: 0.5,
-                            borderRadius: 2,
-                            border: '1px solid #e2e8f0',
-                            boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
-                          },
-                        },
-                      },
-                    }}
-                  >
-                    <MenuItem value=""><em>Select Seed Type</em></MenuItem>
-                    {SEED_CATEGORY_OPTIONS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                  </TextField>
-                </Grid>
-
-                {/* 2. Location & Number of QR Codes */}
-                <Grid size={{ xs: 12, sm: 8 }}>
+                {/* 2. Location */}
+                <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="Location"
@@ -439,48 +312,9 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     helperText="Format: Land - Line - Count (e.g. R - 2 - 24)"
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Number of QR Codes"
-                    name="count"
-                    value={entry.count}
-                    onChange={(e) => handleEntryChange(index, 'count', e.target.value)}
-                    size="small"
-                    type="number"
-                    placeholder="e.g. 24"
-                    inputProps={{ min: 1, max: 5000 }}
-                    helperText={entry.location ? "Synced with Location" : "1–5000"}
-                  />
-                </Grid>
 
-                {/* Existing Batch Number & Batch Code */}
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Batch Number"
-                    name="batchNumber"
-                    value={entry.batchNumber}
-                    onChange={(e) => handleEntryChange(index, 'batchNumber', e.target.value)}
-                    size="small"
-                    placeholder="e.g. BA-09"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Batch Code"
-                    name="batchCode"
-                    value={entry.batchCode}
-                    onChange={(e) => handleEntryChange(index, 'batchCode', e.target.value)}
-                    size="small"
-                    inputProps={{ style: { textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: 700 } }}
-                    helperText="Auto-derived"
-                  />
-                </Grid>
-
-                {/* 3. Four New Fields: PreviousYear, PreviousLocation, Gean, Comments */}
-                <Grid size={{ xs: 12, sm: 6 }}>
+                {/* 3. PreviousYear & PreviousLocation */}
+                <Grid size={{ xs: 6 }}>
                   <TextField
                     fullWidth
                     label="PreviousYear"
@@ -492,7 +326,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     placeholder="e.g. 2025"
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 6 }}>
                   <TextField
                     fullWidth
                     label="PreviousLocation"
@@ -500,10 +334,12 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     value={entry.previousLocation}
                     onChange={(e) => handleEntryChange(index, 'previousLocation', e.target.value)}
                     size="small"
-                    placeholder="e.g. R - 1 - 20"
+                    placeholder="e.g. R - 1 - 24"
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+
+                {/* 4. Gean & Comments */}
+                <Grid size={{ xs: 6 }}>
                   <TextField
                     fullWidth
                     label="Gean"
@@ -511,10 +347,10 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     value={entry.gean}
                     onChange={(e) => handleEntryChange(index, 'gean', e.target.value)}
                     size="small"
-                    placeholder="e.g. Gean / Gene info"
+                    placeholder="e.g. Gean / Gene details"
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 6 }}>
                   <TextField
                     fullWidth
                     label="Comments"
@@ -522,154 +358,34 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     value={entry.comments}
                     onChange={(e) => handleEntryChange(index, 'comments', e.target.value)}
                     size="small"
-                    placeholder="e.g. Remarks / comments"
+                    placeholder="e.g. Remarks"
                   />
-                </Grid>
-
-                {/* Existing Storage & Date fields */}
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Month"
-                    name="month"
-                    value={entry.month}
-                    onChange={(e) => handleEntryChange(index, 'month', e.target.value)}
-                    size="small"
-                    type="number"
-                    placeholder="e.g. 6"
-                    inputProps={{ min: 1, max: 12 }}
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Year"
-                    name="year"
-                    value={entry.year}
-                    onChange={(e) => handleEntryChange(index, 'year', e.target.value)}
-                    size="small"
-                    type="number"
-                    placeholder="e.g. 2026"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    select
-                    fullWidth
-                    name="warehouse"
-                    value={entry.warehouse}
-                    onChange={(e) => handleEntryChange(index, 'warehouse', e.target.value)}
-                    size="small"
-                    SelectProps={{ displayEmpty: true }}
-                  >
-                    <MenuItem value=""><em>Select Warehouse</em></MenuItem>
-                    {WAREHOUSE_OPTIONS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                  </TextField>
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    select
-                    fullWidth
-                    name="rack"
-                    value={entry.rack}
-                    onChange={(e) => handleEntryChange(index, 'rack', e.target.value)}
-                    size="small"
-                    SelectProps={{ displayEmpty: true }}
-                  >
-                    <MenuItem value=""><em>Select Rack</em></MenuItem>
-                    {RACK_OPTIONS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                  </TextField>
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    select
-                    fullWidth
-                    name="shelf"
-                    value={entry.shelf}
-                    onChange={(e) => handleEntryChange(index, 'shelf', e.target.value)}
-                    size="small"
-                    SelectProps={{ displayEmpty: true }}
-                  >
-                    <MenuItem value=""><em>Select Shelf</em></MenuItem>
-                    {SHELF_OPTIONS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                  </TextField>
                 </Grid>
               </Grid>
 
-              {/* Seed Management Details (optional) Accordion */}
-              <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', mt: 2.5, mb: 1, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                Seed Management Details (optional)
-              </Typography>
-              {BATCH_DETAIL_SECTIONS.map(section => {
-                const filled = section.fields.filter(f => String(entry[f.name]).trim() !== '').length;
-                return (
-                  <Accordion
-                    key={section.title}
-                    disableGutters
-                    elevation={0}
-                    sx={{ border: '1px solid #e2e8f0', borderRadius: '8px !important', mb: 1, '&:before': { display: 'none' } }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
-                      sx={{ minHeight: 44, '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1, my: 0.5 } }}
-                    >
-                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{section.title}</Typography>
-                      <Typography sx={{ fontSize: 11, fontWeight: 600, color: filled ? '#1a227f' : '#94a3b8' }}>
-                        {filled} of {section.fields.length} filled
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 0.5 }}>
-                      <Grid container spacing={2}>
-                        {section.fields.map(f => (
-                          <Grid key={f.name} size={{ xs: 12, sm: f.multiline ? 12 : 6 }}>
-                            <TextField
-                              fullWidth
-                              label={f.label}
-                              name={f.name}
-                              value={entry[f.name]}
-                              onChange={(e) => handleEntryChange(index, f.name, e.target.value)}
-                              size="small"
-                              type={f.type === 'number' ? 'number' : 'text'}
-                              multiline={!!f.multiline}
-                              minRows={f.multiline ? 2 : undefined}
-                              placeholder={f.placeholder}
-                              helperText={f.helperText}
-                              inputProps={f.type === 'number' ? { step: 'any' } : { maxLength: BATCH_DETAIL_TEXT_MAX }}
-                            />
-                          </Grid>
-                        ))}
-                      </Grid>
-                    </AccordionDetails>
-                  </Accordion>
-                );
-              })}
-
-              {/* QR Preview & Sequence Display */}
-              {entry.location && parsedLoc ? (
+              {/* Individual QR preview based on Location */}
+              {parsed && (
                 <Box sx={{ mt: 2, p: 1.5, background: '#f0fdf4', borderRadius: 2, border: '1px solid #bbf7d0' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      QR Codes & Location Sequence ({parsedLoc.count} Individual QRs)
+                      Individual QR Codes ({parsed.count} Total QRs)
                     </Typography>
                     <Chip
-                      label={`${entry.cropName || entry.seedType || 'Crop'} Associated`}
+                      label={`${entry.cropName || 'Crop'} Associated`}
                       size="small"
                       sx={{ fontSize: 10, fontWeight: 700, background: '#dcfce7', color: '#15803d' }}
                     />
                   </Box>
                   <Typography sx={{ fontFamily: 'monospace', fontSize: 12, color: '#15803d', fontWeight: 700 }}>
-                    {parsedLoc.land} - {parsedLoc.line} - 1  →  {parsedLoc.land} - {parsedLoc.line} - {parsedLoc.count}
+                    {parsed.land} - {parsed.line} - 1  →  {parsed.land} - {parsed.line} - {parsed.count}
                   </Typography>
-                  {previewId && (
-                    <Typography sx={{ fontFamily: 'monospace', fontSize: 11, color: '#3d47a3', mt: 0.5 }}>
-                      {previewId}
+                  {previewPrd && (
+                    <Typography sx={{ fontFamily: 'monospace', fontSize: 11, color: '#3d47a3', mt: 0.3 }}>
+                      {previewPrd}
                     </Typography>
                   )}
-                  <Typography sx={{ fontSize: 11, color: '#475569', mt: 0.5 }}>
-                    {parsedLoc.count} individual QR codes will be generated in sequence:
-                  </Typography>
                   <Box sx={{
-                    maxHeight: 110,
+                    maxHeight: 100,
                     overflowY: 'auto',
                     mt: 0.7,
                     p: 1,
@@ -678,46 +394,39 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     border: '1px solid #e2e8f0',
                     fontSize: 11,
                     fontFamily: 'monospace',
-                    color: '#334155'
+                    color: '#334155',
                   }}>
-                    {Array.from({ length: Math.min(parsedLoc.count, 5) }, (_, i) => (
+                    {Array.from({ length: Math.min(parsed.count, 4) }, (_, i) => (
                       <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.2 }}>
-                        <span>{i + 1}. {parsedLoc.land} - {parsedLoc.line} - {i + 1}</span>
-                        <span style={{ color: '#64748b' }}>PRD-{entry.seedCode || 'XX'}{entry.batchCode || 'YY'}-{String(i + 1).padStart(3, '0')}</span>
+                        <span>{i + 1}. {parsed.land} - {parsed.line} - {i + 1}</span>
+                        <span style={{ color: '#64748b' }}>PRD-{sc || 'XX'}{bc || 'YY'}-{String(i + 1).padStart(3, '0')}</span>
                       </Box>
                     ))}
-                    {parsedLoc.count > 6 && (
-                      <Box sx={{ color: '#94a3b8', fontStyle: 'italic', py: 0.3 }}>
-                        ... Continue in sequence ({parsedLoc.count - 6} more) ...
+                    {parsed.count > 5 && (
+                      <Box sx={{ color: '#94a3b8', fontStyle: 'italic', py: 0.2 }}>
+                        ... Continue in sequence ({parsed.count - 5} more) ...
                       </Box>
                     )}
-                    {parsedLoc.count > 5 && (
+                    {parsed.count > 4 && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.2 }}>
-                        <span>{parsedLoc.count}. {parsedLoc.land} - {parsedLoc.line} - {parsedLoc.count}</span>
-                        <span style={{ color: '#64748b' }}>PRD-{entry.seedCode || 'XX'}{entry.batchCode || 'YY'}-{String(parsedLoc.count).padStart(3, '0')}</span>
+                        <span>{parsed.count}. {parsed.land} - {parsed.line} - {parsed.count}</span>
+                        <span style={{ color: '#64748b' }}>PRD-{sc || 'XX'}{bc || 'YY'}-{String(parsed.count).padStart(3, '0')}</span>
                       </Box>
                     )}
                   </Box>
                 </Box>
-              ) : previewId ? (
-                <Box sx={{ mt: 2, p: 1.5, background: '#f0f4ff', borderRadius: 2, border: '1px solid #c7d2fe' }}>
-                  <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#1a227f', mb: 0.5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preview</Typography>
-                  <Typography sx={{ fontFamily: 'monospace', fontSize: 12, color: '#3d47a3', fontWeight: 700 }}>{previewId}</Typography>
-                  <Typography sx={{ fontSize: 11, color: '#64748b', mt: 0.3 }}>{entry.count} unique QR codes will be generated</Typography>
-                </Box>
-              ) : null}
+              )}
             </Box>
           );
         })}
 
-        {/* 4. Add More – Unlimited Repeatable Form Sections */}
+        {/* Add More checkbox-style control */}
         <Box
           sx={{
-            mt: 2,
-            mb: 2,
-            p: 1.5,
-            border: '2px dashed #1a227f44',
-            borderRadius: 2.5,
+            mt: 1.5,
+            p: 1.2,
+            border: '1.5px dashed #1a227f44',
+            borderRadius: 2,
             background: '#f8fafc',
             display: 'flex',
             alignItems: 'center',
@@ -738,10 +447,10 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
             }
             label={
               <Box onClick={handleAddMore} sx={{ cursor: 'pointer' }}>
-                <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: '#1a227f' }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
                   Add More
                 </Typography>
-                <Typography sx={{ fontSize: 11, color: '#64748b' }}>
+                <Typography sx={{ fontSize: 10.5, color: '#64748b' }}>
                   Check to add another complete crop entry form below
                 </Typography>
               </Box>
@@ -758,8 +467,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
               color: '#1a227f',
               fontWeight: 700,
               textTransform: 'none',
-              fontSize: 12,
-              '&:hover': { background: 'rgba(26,34,127,0.06)', borderColor: '#1a227f' },
+              fontSize: 11.5,
             }}
           >
             Add More
@@ -767,15 +475,14 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
         </Box>
 
         {entries.length > 1 && (
-          <Box sx={{ p: 1.5, background: '#f1f5f9', borderRadius: 2, mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
-              Total Forms: {entries.length} crop entries
+          <Box sx={{ p: 1.2, background: '#f1f5f9', borderRadius: 2, mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>
+              Total Entries: {entries.length}
             </Typography>
             <Chip
               label={`${totalCount} Total QRs`}
-              color="primary"
               size="small"
-              sx={{ fontWeight: 800, background: '#1a227f' }}
+              sx={{ fontWeight: 800, background: '#1a227f', color: '#fff' }}
             />
           </Box>
         )}
@@ -786,8 +493,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
           </Box>
         )}
       </DialogContent>
-      <Divider />
-      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
         <Button onClick={handleClose} variant="outlined" sx={{ borderRadius: 2 }}>Cancel</Button>
         <Button
           onClick={handleCreate}
@@ -796,7 +502,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
           startIcon={creating ? <CircularProgress size={16} color="inherit" /> : <QrCode2Icon />}
           sx={{ background: 'linear-gradient(135deg,#1a227f,#3d47a3)', borderRadius: 2 }}
         >
-          {creating ? 'Generating...' : `Generate ${totalCount || ''} QRs`}
+          {creating ? 'Generating...' : `Generate ${totalCount ? `${totalCount} ` : ''}QRs`}
         </Button>
       </DialogActions>
     </Dialog>
