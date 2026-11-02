@@ -71,6 +71,7 @@ const SeedBatchSchema = new mongoose.Schema({
     land:                 { type: String, default: '' },
     line:                 { type: String, default: '' },
     locationCode:         { type: String, default: '' },
+    year:                 { type: Number, default: null },
     previousYear:         { type: Number, default: null },
     previousLocationCode: { type: String, default: '' },
     gene:                 { type: String, default: '' },

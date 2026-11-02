@@ -51,6 +51,7 @@ const createInitialEntry = (id = 1) => ({
   seedCode: '',
   seedCategory: '',
   location: '',
+  year: '',
   previousYear: '',
   previousLocation: '',
   gean: '',
@@ -133,6 +134,13 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
         setCreateError(`${prefix}QR count in Location must be between 1 and 5000`);
         return;
       }
+      if (entry.year && String(entry.year).trim()) {
+        const y = Number(entry.year);
+        if (!Number.isFinite(y)) {
+          setCreateError(`${prefix}Year must be a number`);
+          return;
+        }
+      }
       if (entry.previousYear && String(entry.previousYear).trim()) {
         const py = Number(entry.previousYear);
         if (!Number.isFinite(py)) {
@@ -167,6 +175,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
           line: line,
           location: entry.location.trim(),
           locationCode: entry.location.trim(),
+          year: entry.year && String(entry.year).trim() ? Number(entry.year) : null,
           previousYear: entry.previousYear && String(entry.previousYear).trim() ? Number(entry.previousYear) : null,
           previousLocation: entry.previousLocation?.trim() || '',
           previousLocationCode: entry.previousLocation?.trim() || '',
@@ -346,7 +355,19 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                   />
                 </Grid>
 
-                {/* 3. PreviousYear & PreviousLocation */}
+                {/* 3. Year & PreviousYear */}
+                <Grid size={{ xs: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="Year"
+                    name="year"
+                    value={entry.year}
+                    onChange={(e) => handleEntryChange(index, 'year', e.target.value)}
+                    size="small"
+                    type="number"
+                    placeholder="e.g. 2026"
+                  />
+                </Grid>
                 <Grid size={{ xs: 6 }}>
                   <TextField
                     fullWidth
@@ -359,7 +380,9 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     placeholder="e.g. 2025"
                   />
                 </Grid>
-                <Grid size={{ xs: 6 }}>
+
+                {/* 4. PreviousLocation */}
+                <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
                     label="PreviousLocation"

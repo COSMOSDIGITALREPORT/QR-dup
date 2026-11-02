@@ -705,29 +705,6 @@ export default function Batches() {
                 </Box>
               ) : (
                 <>
-                  {/* Real batch summary — all from the real SeedBatch document */}
-                  <Grid container spacing={1.2} sx={{ mb: 2.5 }}>
-                    {[
-                      ['Seed Type', detailBatch.seedType || '—'],
-                      ['Total Packets', detailPackets.length],
-                      ['Filled', detailPackets.filter(p => p.status === 'filled').length],
-                      ['Pending', detailPackets.filter(p => p.status === 'empty').length],
-                      ['Month', detailBatch.month ?? '—'],
-                      ['Year', detailBatch.year ?? '—'],
-                      ['Warehouse', detailBatch.warehouse || '—'],
-                      ['Rack', detailBatch.rack || '—'],
-                      ['Shelf', detailBatch.shelf || '—'],
-                      ['Created', detailBatch.createdAt ? new Date(detailBatch.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
-                    ].map(([label, value]) => (
-                      <Grid size={{ xs: 6, sm: 4, md: 2.4 }} key={label}>
-                        <Box sx={{ background: '#f8fafc', borderRadius: 2, p: 1.2, textAlign: 'center', border: '1px solid #f1f5f9' }}>
-                          <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{value}</Typography>
-                          <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</Typography>
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
-
                   {/* Seed entries in this batch */}
                   {detailBatch.seeds && detailBatch.seeds.length > 0 ? (
                     <Box sx={{ mb: 2.5 }}>
@@ -757,12 +734,13 @@ export default function Batches() {
                                   ['Seed Code', s.seedCode || '—'],
                                   ['Seed Type', s.seedCategory || '—'],
                                   ['Location', s.locationCode || (s.land && s.line ? `${s.land} - ${s.line} - ${s.count}` : '—')],
+                                  ['Year', s.year ?? '—'],
                                   ['Previous Year', s.previousYear ?? '—'],
                                   ['Previous Location', s.previousLocationCode || '—'],
                                   ['Gean', s.gene || '—'],
                                   ['Comments', s.comments || '—'],
                                 ].map(([label, val]) => (
-                                  <Grid size={{ xs: 6, sm: 3 }} key={label}>
+                                  <Grid size={{ xs: 6, sm: 4, md: 2.66 }} key={label}>
                                     <Box sx={{ background: '#fff', p: 0.8, borderRadius: 1.5, border: '1px solid #f1f5f9' }}>
                                       <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
                                         {label}
