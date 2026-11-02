@@ -17,9 +17,11 @@ import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import ImageIcon from '@mui/icons-material/Image';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import NewBatchDialog from '../components/NewBatchDialog';
+import EditBatchDialog from '../components/EditBatchDialog';
 import { BATCH_DETAIL_FIELDS } from '../components/batchDetailFields';
 import { batchAPI } from '../services/api';
 
@@ -61,6 +63,7 @@ export default function Batches() {
   const [detailPackets, setDetailPackets] = useState([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError,   setDetailError]   = useState('');
+  const [editBatchId,   setEditBatchId]   = useState(null);
   const [packetSearch,  setPacketSearch]  = useState('');
   const [viewPhoto,     setViewPhoto]     = useState(null); // { url, label } | null
 
@@ -528,6 +531,15 @@ export default function Batches() {
 
                   {/* Buttons */}
                   <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                    <Button variant="outlined" startIcon={<EditOutlinedIcon />}
+                      onClick={() => setEditBatchId(b._id)}
+                      sx={{
+                        borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                        borderColor: '#e2e8f0', color: '#1a227f', px: 1.8,
+                        '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
+                      }}>
+                      Edit
+                    </Button>
                     <Button variant="outlined" startIcon={<InfoOutlinedIcon />}
                       onClick={() => openDetailDialog(b)}
                       sx={{
@@ -690,9 +702,27 @@ export default function Batches() {
                     {detailBatch.batchNumber}
                   </Typography>
                 </Box>
-                <IconButton onClick={() => setDetailBatch(null)} sx={{ color: '#fff' }}>
-                  <CloseIcon />
-                </IconButton>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<EditOutlinedIcon />}
+                    onClick={() => {
+                      const id = detailBatch._id;
+                      setDetailBatch(null);
+                      setEditBatchId(id);
+                    }}
+                    sx={{
+                      background: 'rgba(255,255,255,0.2)',
+                      '&:hover': { background: 'rgba(255,255,255,0.3)' },
+                      borderRadius: 2, fontSize: 12, fontWeight: 700
+                    }}
+                  >
+                    Edit Batch
+                  </Button>
+                  <IconButton onClick={() => setDetailBatch(null)} sx={{ color: '#fff' }}>
+                    <CloseIcon />
+                  </IconButton>
+                </Box>
               </Box>
             </DialogTitle>
 
@@ -863,6 +893,16 @@ export default function Batches() {
         onClose={() => setCreateOpen(false)}
         onCreated={(data) => {
           setSuccessMsg(`${data.batch.batchName} saved — ${data.message}`);
+          fetchBatches();
+        }}
+      />
+
+      <EditBatchDialog
+        open={Boolean(editBatchId)}
+        batchId={editBatchId}
+        onClose={() => setEditBatchId(null)}
+        onUpdated={(data) => {
+          setSuccessMsg(data?.message || 'Batch updated with extra QR codes successfully');
           fetchBatches();
         }}
       />

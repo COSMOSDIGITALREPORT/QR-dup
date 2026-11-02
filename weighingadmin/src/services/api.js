@@ -92,6 +92,7 @@ export const batchAPI = {
   // Product Inventory filtering (Seed/Batch/Warehouse) — reads real
   // SeedBatch/SeedPacket data only, never the legacy Product collection.
   inventory: (params) => api.get('/batches/inventory', { params }),
+  addExtraQRs: (id, data) => api.post('/batches', { ...data, batchId: id, action: 'extra-qrs' }),
 };
 
 // ── Admin ─────────────────────────────────────────

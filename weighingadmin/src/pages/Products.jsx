@@ -16,10 +16,12 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
 import NewBatchDialog from '../components/NewBatchDialog';
+import EditBatchDialog from '../components/EditBatchDialog';
 
 function escapeHtml(value) {
   if (value === null || value === undefined) return '';
@@ -88,6 +90,33 @@ export default function Products() {
   const [successMsg, setSuccessMsg] = useState('');
   const [detailGroup, setDetailGroup] = useState(null);
   const [detailSearch, setDetailSearch] = useState('');
+  const [editBatchId, setEditBatchId] = useState(null);
+  const [batchSelectDialog, setBatchSelectDialog] = useState(null);
+
+  const handleOpenEditProduct = (group) => {
+    if (!group || !group.records || group.records.length === 0) return;
+    const batchesMap = new Map();
+    group.records.forEach(r => {
+      const bId = r.batchId;
+      if (bId && !batchesMap.has(String(bId))) {
+        batchesMap.set(String(bId), {
+          id: bId,
+          name: r.batchName || r.batch || 'Batch',
+          number: r.batch,
+        });
+      }
+    });
+    const distinct = Array.from(batchesMap.values());
+    if (distinct.length === 1) {
+      setEditBatchId(distinct[0].id);
+    } else if (distinct.length > 1) {
+      setBatchSelectDialog({ groupName: group.name, batches: distinct });
+    } else if (group.records[0]?.batchId) {
+      setEditBatchId(group.records[0].batchId);
+    } else {
+      alert('No batch reference found for this product group.');
+    }
+  };
 
   // Print selection & preview modal state
   const [printGroup, setPrintGroup] = useState(null);
@@ -575,6 +604,18 @@ export default function Products() {
                     <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
                       <Button
                         variant="outlined"
+                        startIcon={<EditOutlinedIcon />}
+                        onClick={() => handleOpenEditProduct(g)}
+                        sx={{
+                          borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                          borderColor: '#e2e8f0', color: '#1a227f', px: 2,
+                          '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outlined"
                         startIcon={<InfoOutlinedIcon />}
                         onClick={() => { setDetailGroup(g); setDetailSearch(''); }}
                         sx={{
@@ -650,6 +691,14 @@ export default function Products() {
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<EditOutlinedIcon />}
+                    onClick={() => { const g = detailGroup; setDetailGroup(null); handleOpenEditProduct(g); }}
+                    sx={{ background: 'rgba(255,255,255,0.2)', '&:hover': { background: 'rgba(255,255,255,0.3)' }, borderRadius: 2, fontSize: 12, fontWeight: 700 }}
+                  >
+                    Edit Batch
+                  </Button>
                   <Button
                     variant="contained"
                     startIcon={<PrintIcon />}
@@ -773,6 +822,21 @@ export default function Products() {
                             />
                           </TableCell>
                           <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            {r.batchId && (
+                              <Tooltip title="Edit / Add Extra QRs to this batch">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => {
+                                    setDetailGroup(null);
+                                    setEditBatchId(r.batchId);
+                                  }}
+                                  sx={{ color: '#1a227f' }}
+                                >
+                                  <EditOutlinedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                             <Tooltip title="Print this single QR label">
                               <IconButton
                                 size="small"
@@ -787,6 +851,7 @@ export default function Products() {
                                 <PrintIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
+                          </Box>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1097,6 +1162,51 @@ export default function Products() {
             </Button>
           </DialogContent>
         )}
+      </Dialog>
+
+      {/* Edit Batch & Add Extra QR Dialog */}
+      <EditBatchDialog
+        open={Boolean(editBatchId)}
+        batchId={editBatchId}
+        onClose={() => setEditBatchId(null)}
+        onUpdated={(data) => {
+          setSuccessMsg(data?.message || 'Batch updated with extra QR codes successfully');
+          fetchInventory();
+        }}
+      />
+
+      {/* Batch Select Dialog for multi-batch product sets */}
+      <Dialog open={Boolean(batchSelectDialog)} onClose={() => setBatchSelectDialog(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: 16 }}>Select Batch to Edit</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography sx={{ fontSize: 13, color: '#64748b', mb: 2 }}>
+            This product group contains items from multiple batches. Choose which batch to edit:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {batchSelectDialog?.batches?.map(b => (
+              <Button
+                key={b.id}
+                variant="outlined"
+                onClick={() => {
+                  const id = b.id;
+                  setBatchSelectDialog(null);
+                  setEditBatchId(id);
+                }}
+                sx={{
+                  justifyContent: 'space-between', p: 1.5, textTransform: 'none',
+                  borderRadius: 2, borderColor: '#cbd5e1', color: '#0f172a', fontWeight: 700,
+                  '&:hover': { borderColor: '#1a227f', background: '#f0f4ff' }
+                }}
+              >
+                <span>{b.name}</span>
+                <Chip label="Edit Batch" size="small" sx={{ background: '#1a227f', color: '#fff', fontSize: 11, fontWeight: 700 }} />
+              </Button>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBatchSelectDialog(null)}>Cancel</Button>
+        </DialogActions>
       </Dialog>
 
       {/* New Batch Dialog */}
