@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Typography, Chip, CircularProgress, Grid,
-  Checkbox, FormControlLabel,
+  Checkbox, FormControlLabel, MenuItem,
 } from '@mui/material';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
 import AddIcon from '@mui/icons-material/Add';
@@ -19,6 +19,8 @@ const SEED_PRESETS = [
   { label: 'Groundnut', code: 'GN' },
   { label: 'Sunflower', code: 'SF' },
 ];
+
+const SEED_CATEGORY_OPTIONS = ['Organic', 'Hybrid', 'Open Pollinated', 'Heirloom', 'Conventional'];
 
 export function getSeedCodeForCrop(cropName) {
   if (!cropName || typeof cropName !== 'string') return '';
@@ -47,6 +49,7 @@ const createInitialEntry = (id = 1) => ({
   id,
   cropName: '',
   seedCode: '',
+  seedCategory: '',
   location: '',
   previousYear: '',
   previousLocation: '',
@@ -156,7 +159,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
         const payload = {
           batchName: `${entry.cropName.trim()} ${batchNum}`,
           seedType: entry.cropName.trim(),
-          seedCategory: '',
+          seedCategory: entry.seedCategory || '',
           seedCode: sc,
           batchNumber: batchNum,
           batchCode: batchCd,
@@ -297,6 +300,34 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                     inputProps={{ maxLength: 4, style: { textTransform: 'uppercase', fontFamily: 'monospace', fontWeight: 700 } }}
                     helperText="Auto-populated"
                   />
+                </Grid>
+
+                {/* Seed Type dropdown */}
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    select
+                    fullWidth
+                    name="seedCategory"
+                    value={entry.seedCategory || ''}
+                    onChange={(e) => handleEntryChange(index, 'seedCategory', e.target.value)}
+                    size="small"
+                    SelectProps={{
+                      displayEmpty: true,
+                      MenuProps: {
+                        PaperProps: {
+                          sx: {
+                            mt: 0.5,
+                            borderRadius: 2,
+                            border: '1px solid #e2e8f0',
+                            boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
+                          },
+                        },
+                      },
+                    }}
+                  >
+                    <MenuItem value=""><em>Select Seed Type</em></MenuItem>
+                    {SEED_CATEGORY_OPTIONS.map(o => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                  </TextField>
                 </Grid>
 
                 {/* 2. Location */}
