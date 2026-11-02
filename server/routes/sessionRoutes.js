@@ -393,9 +393,7 @@ router.post('/:id/link/:uniqueId', protectUser, sessionMutationLimiter, async (r
       packet.beforeTime   = session.beforeTime;
       packet.afterWeight  = session.afterWeight;
       packet.afterTime    = session.afterTime;
-      packet.difference   = session.difference;
       packet.operator     = session.operator;
-      packet.deviceId     = session.deviceId;
       packet.sessionId    = session._id;
       packet.status       = 'filled';
       packet.linkedAt     = new Date();

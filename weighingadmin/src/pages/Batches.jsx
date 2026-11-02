@@ -819,12 +819,12 @@ export default function Batches() {
                     <Table stickyHeader size="small">
                       <TableHead>
                         <TableRow>
-                          {['Packet ID', 'Crop', 'Location', 'Status', 'Before', 'After', 'Difference', 'Before Photo', 'After Photo', 'Operator', 'Device ID', 'Weighed'].map(h => <TableCell key={h}>{h}</TableCell>)}
+                          {['Packet ID', 'Crop', 'Location', 'Status', 'Before', 'After', 'Before Photo', 'After Photo', 'Operator', 'Weighed'].map(h => <TableCell key={h}>{h}</TableCell>)}
                         </TableRow>
                       </TableHead>
                       <TableBody>
                         {detailPackets.filter(p => !packetSearch || p.uniqueId.toLowerCase().includes(packetSearch.toLowerCase()) || (p.crop && p.crop.toLowerCase().includes(packetSearch.toLowerCase())) || (p.locationCode && p.locationCode.toLowerCase().includes(packetSearch.toLowerCase()))).length === 0 ? (
-                          <TableRow><TableCell colSpan={12} align="center" sx={{ py: 3, color: '#94a3b8' }}>
+                          <TableRow><TableCell colSpan={10} align="center" sx={{ py: 3, color: '#94a3b8' }}>
                             {detailPackets.length === 0 ? 'This batch has no packets' : 'No packets match your search'}
                           </TableCell></TableRow>
                         ) : detailPackets
@@ -843,9 +843,6 @@ export default function Batches() {
                                   </TableCell>
                                   <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{p.beforeWeight != null ? `${p.beforeWeight} kg` : '—'}</TableCell>
                                   <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{p.afterWeight != null ? `${p.afterWeight} kg` : '—'}</TableCell>
-                                  <TableCell sx={{ fontSize: 12, fontWeight: 800, color: p.difference != null && p.difference < 0 ? '#dc2626' : '#0f172a' }}>
-                                    {p.difference != null ? `${p.difference} kg` : '—'}
-                                  </TableCell>
                                   <TableCell>
                                     <Button size="small" disabled={!beforeUrl} onClick={() => setViewPhoto({ url: beforeUrl, label: 'Before Photo' })}
                                       startIcon={<ImageIcon sx={{ fontSize: '14px !important' }} />}
@@ -861,7 +858,6 @@ export default function Batches() {
                                     </Button>
                                   </TableCell>
                                   <TableCell sx={{ fontSize: 12 }}>{p.operator?.name || '—'}</TableCell>
-                                  <TableCell sx={{ fontSize: 12, fontFamily: 'monospace' }}>{p.deviceId || '—'}</TableCell>
                                   <TableCell sx={{ fontSize: 11, fontFamily: 'monospace', color: '#475569' }}>
                                     {p.linkedAt ? new Date(p.linkedAt).toLocaleString() : '—'}
                                   </TableCell>
