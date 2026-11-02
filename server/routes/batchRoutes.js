@@ -1,4 +1,5 @@
 const express  = require('express');
+const mongoose = require('mongoose');
 const router   = express.Router();
 const QRCode   = require('qrcode');
 const SeedBatch  = require('../models/SeedBatch');
@@ -762,6 +763,9 @@ router.get('/inventory', protect, async (req, res) => {
 // GET /api/batches/:id/qr-list — just QR urls for download
 router.get('/:id/qr-list', protect, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid batch ID' });
+    }
     const packets = await SeedPacket.find({ batchId: req.params.id })
       .select('uniqueId qrCodeUrl status crop locationCode seedType serialNumber')
       .sort({ uniqueId: 1 });
@@ -794,6 +798,9 @@ router.get('/:id/qr-list', protect, async (req, res) => {
 // literal segments never get swallowed by this param route.
 router.get('/:id', protect, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid batch ID' });
+    }
     const batch = await SeedBatch.findById(req.params.id).populate('createdBy', 'name');
     if (!batch) return res.status(404).json({ success: false, message: 'Batch not found' });
 
