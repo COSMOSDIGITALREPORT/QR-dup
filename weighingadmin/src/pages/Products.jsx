@@ -1,32 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { batchAPI } from '../services/api';
 import {
   Box, Button, Card, Chip, Grid, IconButton, LinearProgress,
-  Menu, MenuItem, Tab, Tabs, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Typography, InputBase, Paper, Snackbar, Alert, TextField, Tooltip
+  Tab, Tabs, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Typography, InputBase, Paper, Snackbar, Alert, TextField, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, MenuItem, CircularProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import QrCodeIcon from '@mui/icons-material/QrCode';
 import InventoryIcon from '@mui/icons-material/Inventory';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
 import PrintIcon from '@mui/icons-material/Print';
 import EcoIcon from '@mui/icons-material/LocalFlorist';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CloseIcon from '@mui/icons-material/Close';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
 import NewBatchDialog from '../components/NewBatchDialog';
 
-// Escapes text before it is interpolated into the print-label HTML below —
-// product.name/id/batch/qrCodeUrl are admin-entered/DB values, and this HTML
-// is built via document.write() with no other sanitization, so nothing
-// dynamic may reach it unescaped (including inside the img src="..." attribute,
-// where escaping the quote character also prevents attribute breakout).
-// `&` is replaced first so entities added for the other characters are never
-// themselves re-escaped. null/undefined become '' rather than the literal
-// text "undefined"/"null".
 function escapeHtml(value) {
   if (value === null || value === undefined) return '';
   return String(value)
@@ -37,61 +31,28 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function printQRLabel(product) {
-  const qrSrc = escapeHtml(`${batchAPI.qrBaseUrl()}${product.qrCodeUrl}`);
-  const win = window.open('', '_blank', 'width=400,height=500');
-  win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <title>QR Label — ${escapeHtml(product.name)}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; background: #fff; }
-    .label {
-      width: 50mm; height: 50mm;
-      border: 1px solid #ccc;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 3mm; gap: 2mm;
-      page-break-inside: avoid;
-    }
-    .label img { width: 28mm; height: 28mm; }
-    .label .name { font-size: 7pt; font-weight: 700; text-align: center; color: #0f172a; }
-    .label .pid  { font-size: 6pt; font-family: monospace; color: #1a227f; }
-    .label .batch{ font-size: 5.5pt; color: #64748b; }
-    .sheet {
-      display: grid;
-      grid-template-columns: repeat(4, 50mm);
-      gap: 3mm;
-      padding: 10mm;
-    }
-    @media print {
-      body { margin: 0; }
-      .no-print { display: none; }
-      .sheet { padding: 5mm; }
-    }
-  </style>
-</head>
-<body>
-  <div style="padding:8px;background:#f1f5f9;display:flex;gap:8px;align-items:center" class="no-print">
-    <button onclick="window.print()" style="background:#1a227f;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px">
-      🖨️ Print
-    </button>
-    <span style="font-size:12px;color:#475569">Paper: 50×50mm sticker labels &nbsp;|&nbsp; A4 pe 4 columns fit honge</span>
-  </div>
-  <div class="sheet">
-    ${Array(8).fill(`
-    <div class="label">
-      <img src="${qrSrc}" alt="QR"/>
-      <div class="name">${escapeHtml(product.name)}</div>
-      <div class="pid">${escapeHtml(product.id)}</div>
-      <div class="batch">Batch: ${escapeHtml(product.batch)}</div>
-    </div>`).join('')}
-  </div>
-</body>
-</html>`);
-  win.document.close();
+const GRADIENTS = [
+  'linear-gradient(135deg,#1a227f,#3d47a3)',
+  'linear-gradient(135deg,#065f46,#059669)',
+  'linear-gradient(135deg,#7c2d12,#ea580c)',
+  'linear-gradient(135deg,#4c1d95,#7c3aed)',
+  'linear-gradient(135deg,#831843,#db2777)',
+  'linear-gradient(135deg,#1e3a5f,#0ea5e9)',
+  'linear-gradient(135deg,#3b2500,#d97706)',
+  'linear-gradient(135deg,#14532d,#16a34a)',
+];
+
+function getGroupInitials(name) {
+  if (!name) return 'PR';
+  const parts = name.split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length > 1) {
+    return parts.slice(0, 2).map(p => p[0].toUpperCase()).join('');
+  }
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
 }
 
 const seedTypeColor = (s) => {
@@ -110,46 +71,41 @@ export default function Products() {
   const [counts, setCounts] = useState({ organic: 0, hybrid: 0, heirloomModified: 0 });
   const [loading, setLoading] = useState(true);
 
-  // Product Inventory filters — real SeedBatch/SeedPacket data only.
+  // Filters
   const [seed, setSeed] = useState('');
   const [batch, setBatch] = useState('');
   const [warehouse, setWarehouse] = useState('');
   const [seedOptions, setSeedOptions] = useState([]);
   const [batchOptions, setBatchOptions] = useState([]);
   const [warehouseOptions, setWarehouseOptions] = useState([]);
-  // Real pagination — every filter/search change handler below also resets
-  // page to 1 directly, so a stale page number never survives a new filter
-  // combination (done in the handlers, not an effect, to avoid a cascading
-  // render from calling setState inside a useEffect body).
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
-  const hasActiveFilters = Boolean(seed || batch || warehouse);
-  const clearFilters = () => { setSeed(''); setBatch(''); setWarehouse(''); setPage(1); };
-  const handleBatchChange = (v) => { setBatch(v); setPage(1); };
-  const handleWarehouseChange = (v) => { setWarehouse(v); setPage(1); };
-  const handleSearchChange = (v) => { setSearch(v); setPage(1); };
+  // Pagination for grouped sets
+  const [groupPage, setGroupPage] = useState(1);
+  const groupsPerPage = 8;
 
-  // Three-dot menu state
-  const [menuAnchor, setMenuAnchor] = useState(null);
-  const [menuProduct, setMenuProduct] = useState(null);
-
-  // New Batch dialog — opens directly on this page instead of redirecting
-  // to /batches. onCreated triggers an immediate inventory refresh below so
-  // the newly created batch's packets show up without a page reload.
+  // Modals state
   const [createOpen, setCreateOpen] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [detailGroup, setDetailGroup] = useState(null);
+  const [detailSearch, setDetailSearch] = useState('');
 
-  const openMenu = (e, product) => { setMenuAnchor(e.currentTarget); setMenuProduct(product); };
-  const closeMenu = () => { setMenuAnchor(null); };
+  // Print selection & preview modal state
+  const [printGroup, setPrintGroup] = useState(null);
+  const [selectedQrs, setSelectedQrs] = useState({}); // { [id]: boolean }
+  const [copiesMap, setCopiesMap] = useState({});     // { [id]: number }
+  const [printTab, setPrintTab] = useState(0);         // 0: Select QRs, 1: Print Preview
+  const [printSearch, setPrintSearch] = useState('');
 
-  // Batch dropdown depends on the selected seed — reset it whenever the
-  // seed changes so a stale, no-longer-relevant batch can't linger.
-  const handleSeedChange = (v) => { setSeed(v); setBatch(''); setPage(1); };
+  // Single QR quick viewer modal
+  const [previewQr, setPreviewQr] = useState(null); // { id, name, crop, batch, locationCode, qrCodeUrl }
 
-  // Shared by the debounced filter/search effect below and by the New Batch
-  // dialog's onCreated callback, so a successful batch creation can refresh
-  // cards/dropdowns/table immediately without duplicating the fetch logic.
+  const hasActiveFilters = Boolean(seed || batch || warehouse);
+  const clearFilters = () => { setSeed(''); setBatch(''); setWarehouse(''); setGroupPage(1); };
+  const handleBatchChange = (v) => { setBatch(v); setGroupPage(1); };
+  const handleWarehouseChange = (v) => { setWarehouse(v); setGroupPage(1); };
+  const handleSeedChange = (v) => { setSeed(v); setBatch(''); setGroupPage(1); };
+  const handleSearchChange = (v) => { setSearch(v); setGroupPage(1); };
+
   const fetchInventory = useCallback(async () => {
     setLoading(true);
     try {
@@ -158,29 +114,263 @@ export default function Products() {
         seedType: seed || undefined,
         batchNumber: batch || undefined,
         warehouse: warehouse || undefined,
-        page,
+        limit: 'all',
       });
-      setProducts(res.data.products);
-      setTotal(res.data.totalProducts);
+      setProducts(res.data.products || []);
+      setTotal(res.data.totalProducts || 0);
       setCounts({
-        organic: res.data.organicCount,
-        hybrid: res.data.hybridCount,
-        heirloomModified: res.data.heirloomModifiedCount,
+        organic: res.data.organicCount || 0,
+        hybrid: res.data.hybridCount || 0,
+        heirloomModified: res.data.heirloomModifiedCount || 0,
       });
-      setSeedOptions(res.data.seedOptions);
-      setBatchOptions(res.data.batchOptions);
-      setWarehouseOptions(res.data.warehouseOptions);
-      setTotalPages(res.data.pagination?.totalPages || 1);
+      setSeedOptions(res.data.seedOptions || []);
+      setBatchOptions(res.data.batchOptions || []);
+      setWarehouseOptions(res.data.warehouseOptions || []);
     } catch (_) {}
     setLoading(false);
-  }, [search, seed, batch, warehouse, page]);
+  }, [search, seed, batch, warehouse]);
 
   useEffect(() => {
     const t = setTimeout(fetchInventory, 300);
     return () => clearTimeout(t);
   }, [fetchInventory]);
 
-  const mapped = products;
+  // Group products having the same Product Name / combination into ONE parent group
+  const groupedSets = useMemo(() => {
+    const groupsMap = new Map();
+
+    products.forEach(p => {
+      const key = (p.name || 'Unassigned').trim();
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          name: key,
+          category: p.category || '—',
+          batches: new Set(),
+          locations: new Set(),
+          records: [],
+          filledCount: 0,
+          emptyCount: 0,
+          createdAt: p.createdAt,
+        });
+      }
+      const g = groupsMap.get(key);
+      g.records.push(p);
+      if (p.batch) g.batches.add(p.batch);
+      if (p.location) g.locations.add(p.location);
+      if (p.status === 'filled') g.filledCount++;
+      else g.emptyCount++;
+    });
+
+    let list = Array.from(groupsMap.values()).map(g => ({
+      ...g,
+      batchList: Array.from(g.batches).join(', ') || '—',
+      locationList: Array.from(g.locations).join(', ') || '—',
+      totalCount: g.records.length,
+      pctFilled: g.records.length > 0 ? Math.round((g.filledCount / g.records.length) * 100) : 0,
+    }));
+
+    // Filter by client search if typed
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(g =>
+        g.name.toLowerCase().includes(q) ||
+        g.batchList.toLowerCase().includes(q) ||
+        g.locationList.toLowerCase().includes(q) ||
+        g.records.some(r =>
+          (r.id && r.id.toLowerCase().includes(q)) ||
+          (r.crop && r.crop.toLowerCase().includes(q)) ||
+          (r.locationCode && r.locationCode.toLowerCase().includes(q))
+        )
+      );
+    }
+
+    if (tab === 1) {
+      // Recently added: sort by newest created record in group
+      list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    } else {
+      // Sort alphabetically by product name
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return list;
+  }, [products, search, tab]);
+
+  const totalGroups = groupedSets.length;
+  const totalGroupPages = Math.ceil(totalGroups / groupsPerPage) || 1;
+  const paginatedGroups = useMemo(() => {
+    const start = (groupPage - 1) * groupsPerPage;
+    return groupedSets.slice(start, start + groupsPerPage);
+  }, [groupedSets, groupPage]);
+
+  // Open print interface for a specific product group
+  const openPrintDialog = (group) => {
+    const sel = {};
+    const cop = {};
+    group.records.forEach(r => {
+      sel[r.id] = true; // Selected by default
+      cop[r.id] = 1;    // 1 copy by default
+    });
+    setPrintGroup(group);
+    setSelectedQrs(sel);
+    setCopiesMap(cop);
+    setPrintTab(0);
+    setPrintSearch('');
+  };
+
+  const toggleSelectAll = (select) => {
+    if (!printGroup) return;
+    const newSel = {};
+    const newCop = { ...copiesMap };
+    printGroup.records.forEach(r => {
+      newSel[r.id] = select;
+      if (select && !newCop[r.id]) newCop[r.id] = 1;
+    });
+    setSelectedQrs(newSel);
+    setCopiesMap(newCop);
+  };
+
+  const handleToggleQr = (id) => {
+    setSelectedQrs(prev => {
+      const nextVal = !prev[id];
+      if (nextVal && !copiesMap[id]) {
+        setCopiesMap(c => ({ ...c, [id]: 1 }));
+      }
+      return { ...prev, [id]: nextVal };
+    });
+  };
+
+  const handleCopyChange = (id, count) => {
+    const val = Math.max(1, Math.min(99, parseInt(count, 10) || 1));
+    setCopiesMap(prev => ({ ...prev, [id]: val }));
+  };
+
+  // Compute selected count and total label copies to print
+  const selectedCount = printGroup ? printGroup.records.filter(r => selectedQrs[r.id]).length : 0;
+  const totalLabelsToPrint = printGroup
+    ? printGroup.records.reduce((sum, r) => sum + (selectedQrs[r.id] ? (parseInt(copiesMap[r.id], 10) || 1) : 0), 0)
+    : 0;
+
+  // Flattened array of all labels for preview and printing
+  const previewLabels = useMemo(() => {
+    if (!printGroup) return [];
+    const labels = [];
+    printGroup.records.forEach(r => {
+      if (selectedQrs[r.id]) {
+        const copies = Math.max(1, parseInt(copiesMap[r.id], 10) || 1);
+        for (let c = 0; c < copies; c++) {
+          labels.push({
+            ...r,
+            copyIndex: c + 1,
+            totalCopies: copies,
+          });
+        }
+      }
+    });
+    return labels;
+  }, [printGroup, selectedQrs, copiesMap]);
+
+  // Execute print window
+  const executePrintLabels = () => {
+    if (!printGroup || previewLabels.length === 0) {
+      alert('Please select at least one QR code to print.');
+      return;
+    }
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      alert('Please allow popups to print QR labels.');
+      return;
+    }
+
+    const baseUrl = batchAPI.qrBaseUrl();
+    const cardsHtml = previewLabels.map(lbl => {
+      const qrSrc = escapeHtml(`${baseUrl}${lbl.qrCodeUrl}`);
+      const cropName = escapeHtml(lbl.crop || lbl.name || printGroup.name);
+      const batchInfo = escapeHtml(lbl.batchName || lbl.batch || lbl.batchCode || '—');
+      const locNumber = escapeHtml(lbl.locationCode || lbl.id);
+      const idText = escapeHtml(lbl.id);
+
+      return `
+        <div class="label-card">
+          <img class="qr-img" src="${qrSrc}" alt="${idText}" />
+          <div class="crop-name">${cropName}</div>
+          <div class="batch-name">Batch: ${batchInfo}</div>
+          <div class="loc-number">${locNumber}</div>
+          <div class="id-text">${idText}</div>
+          ${lbl.totalCopies > 1 ? `<div class="copy-tag">Copy ${lbl.copyIndex} of ${lbl.totalCopies}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Print QR Labels — ${escapeHtml(printGroup.name)}</title>
+  <style>
+    @page { size: auto; margin: 8mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #fff; color: #0f172a; padding: 12px; }
+    .header-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 12px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0;
+    }
+    .title { font-size: 18px; font-weight: 800; color: #1a227f; }
+    .subtitle { font-size: 12px; color: #64748b; margin-top: 3px; }
+    .btn-print {
+      background: #1a227f; color: #fff; border: none; padding: 8px 20px;
+      border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .sheet {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .label-card {
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      background: #fff;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .qr-img { width: 130px; height: 130px; object-fit: contain; display: block; }
+    .crop-name { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 6px; line-height: 1.2; }
+    .batch-name { font-size: 11px; font-weight: 600; color: #475569; margin-top: 3px; }
+    .loc-number { font-size: 12px; font-weight: 700; color: #1a227f; font-family: monospace; margin-top: 3px; }
+    .id-text { font-size: 9.5px; color: #94a3b8; font-family: monospace; margin-top: 2px; }
+    .copy-tag { font-size: 9px; color: #4338ca; font-weight: 700; margin-top: 3px; background: #e0e7ff; padding: 2px 6px; border-radius: 4px; }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 0; }
+      .sheet { gap: 8px; }
+      .label-card { border: 1px solid #94a3b8; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header-bar no-print">
+    <div>
+      <div class="title">${escapeHtml(printGroup.name)}</div>
+      <div class="subtitle">${previewLabels.length} Labels (${selectedCount} unique QR codes)</div>
+    </div>
+    <button class="btn-print" onclick="window.print()">🖨️ Print Labels</button>
+  </div>
+  <div class="sheet">
+    ${cardsHtml}
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() { window.print(); }, 400);
+    };
+  </script>
+</body>
+</html>`);
+    win.document.close();
+  };
 
   return (
     <Layout>
@@ -249,117 +439,676 @@ export default function Products() {
         </Card>
       )}
 
-      {/* Table */}
-      <Card>
-        <Box sx={{ px: 3, py: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5 }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ '& .MuiTab-root': { textTransform: 'none', fontWeight: 600, fontSize: 13, minWidth: 0, px: 1.5, minHeight: 40 } }}>
-            <Tab label="All Products" />
-            <Tab label="Recently Added" />
-          </Tabs>
-          <Paper elevation={0} sx={{ display: 'flex', alignItems: 'center', px: 1.5, py: 0.5, border: '1px solid #e2e8f0', borderRadius: 2, minWidth: 220 }}>
-            <SearchIcon sx={{ color: '#94a3b8', fontSize: 18, mr: 1 }} />
-            <InputBase placeholder="Search products..." value={search} onChange={e => handleSearchChange(e.target.value)} sx={{ fontSize: 13, flex: 1 }} />
+      {/* Grouped Product Sets Container */}
+      <Card sx={{ p: 2.5, mb: 3 }}>
+        {/* Header bar: Tabs & Search */}
+        <Box sx={{ pb: 2, mb: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1.5, borderBottom: '1px solid #f1f5f9' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Tabs value={tab} onChange={(_, v) => { setTab(v); setGroupPage(1); }}
+              sx={{ '& .MuiTab-root': { textTransform: 'none', fontWeight: 700, fontSize: 13.5, minWidth: 0, px: 2, minHeight: 40 } }}>
+              <Tab label="All Product Sets" />
+              <Tab label="Recently Added" />
+            </Tabs>
+            <Chip
+              label={`${totalGroups} Groups · ${total} Individual QRs`}
+              size="small"
+              sx={{ background: 'rgba(26,34,127,0.08)', color: '#1a227f', fontWeight: 700, fontSize: 11 }}
+            />
+          </Box>
+          <Paper elevation={0} sx={{ display: 'flex', alignItems: 'center', px: 1.5, py: 0.6, border: '1.5px solid #e2e8f0', borderRadius: 2, minWidth: 260 }}>
+            <SearchIcon sx={{ color: '#94a3b8', fontSize: 19, mr: 1 }} />
+            <InputBase
+              placeholder="Search product name, crop, batch, QR ID..."
+              value={search}
+              onChange={e => handleSearchChange(e.target.value)}
+              sx={{ fontSize: 13, flex: 1 }}
+            />
           </Paper>
         </Box>
 
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                {['Product ID', 'Product Name', 'Batch Info', 'Location', 'QR Label', ''].map(h => <TableCell key={h}>{h}</TableCell>)}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading && <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94a3b8' }}>Loading...</TableCell></TableRow>}
-              {!loading && mapped.length === 0 && <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: '#94a3b8' }}>No products found</TableCell></TableRow>}
-              {mapped.map(p => {
-                const sc = seedTypeColor(p.category);
-                return (
-                  <TableRow key={p.id} hover>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#1a227f' }}>{p.id}</TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2 }}>
-                        <Box sx={{ width: 34, height: 34, borderRadius: 1.5, background: 'rgba(26,34,127,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <EcoIcon sx={{ fontSize: 16, color: '#1a227f' }} />
-                        </Box>
-                        <Box>
-                          <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{p.name}</Typography>
-                          <Chip label={p.category || '—'} size="small" sx={{ fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.color, height: 18, mt: 0.3 }} />
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>{p.batch}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ fontSize: 13, color: '#475569' }}>{p.location}</TableCell>
-                    <TableCell>
-                      <Button size="small" variant="outlined" startIcon={<QrCodeIcon sx={{ fontSize: '14px !important' }} />}
-                        onClick={() => window.open(`${batchAPI.qrBaseUrl()}${p.qrCodeUrl || ''}`, '_blank')}
-                        sx={{ borderRadius: 1.5, fontSize: 11, fontWeight: 700, textTransform: 'none', py: 0.4, borderColor: '#1a227f', color: '#1a227f' }}>
-                        QR Label
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <IconButton size="small" onClick={(e) => openMenu(e, p)}><MoreVertIcon fontSize="small" /></IconButton>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        <Box sx={{ px: 3, py: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: 1 }}>
-          <Typography sx={{ fontSize: 12, color: '#64748b' }}>Showing {mapped.length} of {total} products</Typography>
-          <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'center' }}>
-            <Button size="small" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-              sx={{ minWidth: 0, px: 1, fontSize: 12, fontWeight: 600, textTransform: 'none', color: '#1a227f' }}>
-              Previous
-            </Button>
-            <Typography sx={{ fontSize: 12, color: '#64748b', mr: 1 }}>Page</Typography>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>{page}</Typography>
-            <Typography sx={{ fontSize: 12, color: '#64748b' }}>of {totalPages || 1}</Typography>
-            <Button size="small" disabled={page >= (totalPages || 1)} onClick={() => setPage(p => p + 1)}
-              sx={{ minWidth: 0, px: 1, fontSize: 12, fontWeight: 600, textTransform: 'none', color: '#1a227f' }}>
-              Next
-            </Button>
+        {/* Grouped Cards List */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress />
           </Box>
-        </Box>
-      </Card>
-      {/* Three-dot dropdown menu — Edit/Delete are disabled here because these
-          rows are real SeedPacket records; there is no current SeedBatch/
-          SeedPacket edit or delete API, and the legacy Product edit/delete
-          endpoints must never be called with a SeedPacket id. Print QR Label
-          is unaffected and keeps using the packet's existing permanent QR. */}
-      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
-        <Tooltip title="Editing isn't available yet for Product Inventory records" placement="left">
-          <span>
-            <MenuItem disabled sx={{ gap: 1.2, fontSize: 13 }}>
-              <EditIcon fontSize="small" sx={{ color: '#1a227f' }} /> Edit
-            </MenuItem>
-          </span>
-        </Tooltip>
-        <MenuItem onClick={() => { printQRLabel(menuProduct); closeMenu(); }}
-          sx={{ gap: 1.2, fontSize: 13 }}>
-          <PrintIcon fontSize="small" sx={{ color: '#1a227f' }} /> Print QR Label
-        </MenuItem>
-        <Tooltip title="Deleting isn't available yet for Product Inventory records" placement="left">
-          <span>
-            <MenuItem disabled sx={{ gap: 1.2, fontSize: 13, color: '#ef4444' }}>
-              <DeleteIcon fontSize="small" /> Delete
-            </MenuItem>
-          </span>
-        </Tooltip>
-      </Menu>
+        ) : paginatedGroups.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 8, border: '2px dashed #e2e8f0', borderRadius: 3, background: '#fafafa' }}>
+            <InventoryIcon sx={{ fontSize: 54, color: '#cbd5e1', mb: 1.5 }} />
+            <Typography sx={{ fontWeight: 700, fontSize: 16, color: '#475569' }}>No product groups found</Typography>
+            <Typography sx={{ fontSize: 13, color: '#94a3b8', mt: 0.5 }}>Try adjusting your filters or search keywords</Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {paginatedGroups.map((g, idx) => {
+              const gradient = GRADIENTS[idx % GRADIENTS.length];
+              const initials = getGroupInitials(g.name);
+              const sc = seedTypeColor(g.category);
+              const firstId = g.records[0]?.id || '';
+              const lastId  = g.records[g.records.length - 1]?.id || '';
 
+              return (
+                <Box key={g.name} sx={{
+                  display: 'flex', alignItems: 'stretch',
+                  borderRadius: 3, border: '1.5px solid #e2e8f0', overflow: 'hidden',
+                  background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  transition: 'box-shadow 0.2s',
+                  '&:hover': { boxShadow: '0 6px 20px rgba(0,0,0,0.08)', borderColor: '#cbd5e1' },
+                }}>
+                  {/* Left accent strip */}
+                  <Box sx={{
+                    width: 90, flexShrink: 0, background: gradient,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    justifyContent: 'center', gap: 0.5, p: 2, position: 'relative', overflow: 'hidden',
+                  }}>
+                    <Box sx={{ position: 'absolute', top: -16, right: -16, width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+                    <Typography sx={{ fontSize: 20, fontWeight: 900, color: '#fff', lineHeight: 1 }}>{initials}</Typography>
+                    <Chip label={`${g.totalCount} QRs`} size="small"
+                      sx={{ background: 'rgba(255,255,255,0.25)', color: '#fff', fontWeight: 800, fontSize: 9, height: 18, mt: 0.5 }} />
+                  </Box>
+
+                  {/* Main content */}
+                  <Box sx={{ flex: 1, p: 2.2, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', minWidth: 0 }}>
+                    {/* Product Name & Metadata */}
+                    <Box sx={{ minWidth: 200, flex: '1 1 200px' }}>
+                      <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'center', flexWrap: 'wrap', mb: 0.8 }}>
+                        <Chip label={g.category || 'General'} size="small"
+                          sx={{ fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.color, height: 20 }} />
+                        <Chip label={`Batches: ${g.batchList}`} size="small"
+                          sx={{ fontSize: 10, fontWeight: 600, background: '#f1f5f9', color: '#475569', height: 20 }} />
+                      </Box>
+                      <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>
+                        {g.name}
+                      </Typography>
+                      <Typography sx={{ fontSize: 11.5, color: '#64748b', mt: 0.3 }}>
+                        {g.locationList !== '—' ? `Warehouse: ${g.locationList} · ` : ''}
+                        {g.totalCount} individual QR codes · {g.batches.size} batch{g.batches.size === 1 ? '' : 'es'}
+                      </Typography>
+                    </Box>
+
+                    {/* QR Range */}
+                    <Box sx={{ minWidth: 160, flex: '1 1 160px' }}>
+                      <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.06em', mb: 0.4 }}>
+                        QR ID RANGE
+                      </Typography>
+                      <Typography sx={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 700, color: '#1a227f' }}>
+                        {firstId}
+                      </Typography>
+                      <Typography sx={{ fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>
+                        → {lastId}
+                      </Typography>
+                    </Box>
+
+                    {/* Stats */}
+                    <Box sx={{ display: 'flex', gap: 1.2, alignItems: 'center', flex: '0 0 auto' }}>
+                      {[
+                        { label: 'TOTAL', value: g.totalCount,  bg: '#f0f4ff', color: '#1a227f' },
+                        { label: 'FILLED', value: g.filledCount, bg: '#f0fdf4', color: '#15803d' },
+                        { label: 'EMPTY',  value: g.emptyCount,  bg: '#fff7ed', color: '#c2410c' },
+                      ].map(s => (
+                        <Box key={s.label} sx={{ textAlign: 'center', background: s.bg, borderRadius: 2, px: 1.5, py: 0.8 }}>
+                          <Typography sx={{ fontSize: 17, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</Typography>
+                          <Typography sx={{ fontSize: 8.5, color: '#64748b', fontWeight: 700, letterSpacing: '0.05em' }}>{s.label}</Typography>
+                        </Box>
+                      ))}
+                    </Box>
+
+                    {/* Progress */}
+                    <Box sx={{ minWidth: 100, flex: '1 1 100px' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography sx={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Filled</Typography>
+                        <Typography sx={{ fontSize: 10, fontWeight: 700, color: g.pctFilled === 100 ? '#15803d' : '#1a227f' }}>
+                          {g.pctFilled}%
+                        </Typography>
+                      </Box>
+                      <LinearProgress variant="determinate" value={g.pctFilled} sx={{
+                        height: 6, borderRadius: 3, background: '#e2e8f0',
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 3,
+                          background: g.pctFilled === 100
+                            ? 'linear-gradient(90deg,#16a34a,#22c55e)'
+                            : 'linear-gradient(90deg,#1a227f,#6366f1)',
+                        },
+                      }} />
+                    </Box>
+
+                    {/* Action buttons */}
+                    <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<InfoOutlinedIcon />}
+                        onClick={() => { setDetailGroup(g); setDetailSearch(''); }}
+                        sx={{
+                          borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                          borderColor: '#e2e8f0', color: '#1a227f', px: 2,
+                          '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
+                        }}
+                      >
+                        View Details
+                      </Button>
+                      <Button
+                        variant="contained"
+                        startIcon={<PrintIcon />}
+                        onClick={() => openPrintDialog(g)}
+                        sx={{
+                          borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                          background: 'linear-gradient(135deg,#1a227f,#3d47a3)', px: 2,
+                          '&:hover': { background: 'linear-gradient(135deg,#141a5e,#2d3590)' },
+                        }}
+                      >
+                        Print QR
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+
+        {/* Pagination bar */}
+        {!loading && totalGroups > 0 && (
+          <Box sx={{ px: 2, pt: 3, mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: 1 }}>
+            <Typography sx={{ fontSize: 12, color: '#64748b' }}>
+              Showing {paginatedGroups.length} of {totalGroups} product groups ({total} total individual QRs)
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.8, alignItems: 'center' }}>
+              <Button size="small" disabled={groupPage <= 1} onClick={() => setGroupPage(p => Math.max(1, p - 1))}
+                sx={{ minWidth: 0, px: 1.5, fontSize: 12, fontWeight: 600, textTransform: 'none', color: '#1a227f' }}>
+                Previous
+              </Button>
+              <Typography sx={{ fontSize: 12, color: '#64748b' }}>Page</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>{groupPage}</Typography>
+              <Typography sx={{ fontSize: 12, color: '#64748b' }}>of {totalGroupPages}</Typography>
+              <Button size="small" disabled={groupPage >= totalGroupPages} onClick={() => setGroupPage(p => p + 1)}
+                sx={{ minWidth: 0, px: 1.5, fontSize: 12, fontWeight: 600, textTransform: 'none', color: '#1a227f' }}>
+                Next
+              </Button>
+            </Box>
+          </Box>
+        )}
+      </Card>
+
+      {/* ── 2. VIEW DETAILS MODAL ── */}
+      <Dialog
+        open={Boolean(detailGroup)}
+        onClose={() => setDetailGroup(null)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, maxHeight: '90vh' } }}
+      >
+        {detailGroup && (
+          <>
+            <DialogTitle sx={{ p: 0 }}>
+              <Box sx={{
+                background: 'linear-gradient(135deg,#1a227f,#3d47a3)',
+                p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff',
+              }}>
+                <Box>
+                  <Typography sx={{ fontSize: 18, fontWeight: 800 }}>{detailGroup.name}</Typography>
+                  <Typography sx={{ fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>
+                    Complete product group records · {detailGroup.records.length} individual QR codes · Category: {detailGroup.category}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<PrintIcon />}
+                    onClick={() => { const g = detailGroup; setDetailGroup(null); openPrintDialog(g); }}
+                    sx={{ background: 'rgba(255,255,255,0.2)', '&:hover': { background: 'rgba(255,255,255,0.3)' }, borderRadius: 2, fontSize: 12, fontWeight: 700 }}
+                  >
+                    Print QRs
+                  </Button>
+                  <IconButton onClick={() => setDetailGroup(null)} sx={{ color: '#fff' }}>
+                    <CloseIcon />
+                  </IconButton>
+                </Box>
+              </Box>
+            </DialogTitle>
+
+            <DialogContent sx={{ p: 2.5 }}>
+              {/* Group summary cards */}
+              <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
+                {[
+                  ['Product Name', detailGroup.name],
+                  ['Category', detailGroup.category],
+                  ['Batches Included', detailGroup.batchList],
+                  ['Storage Location', detailGroup.locationList],
+                  ['Total QR Codes', detailGroup.totalCount],
+                  ['Filled Packets', detailGroup.filledCount],
+                  ['Empty Packets', detailGroup.emptyCount],
+                ].map(([label, val]) => (
+                  <Grid size={{ xs: 6, sm: 4, md: 1.71 }} key={label}>
+                    <Box sx={{ background: '#f8fafc', p: 1.2, borderRadius: 2, border: '1px solid #f1f5f9', textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0f172a', wordBreak: 'break-word' }}>{val}</Typography>
+                      <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', mt: 0.3 }}>{label}</Typography>
+                    </Box>
+                  </Grid>
+                ))}
+              </Grid>
+
+              {/* Search within group */}
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search within this group by Product ID, Crop, QR Number, Batch..."
+                value={detailSearch}
+                onChange={e => setDetailSearch(e.target.value)}
+                InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ color: '#94a3b8', mr: 1 }} /> }}
+                sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+              />
+
+              {/* Table of individual QR records */}
+              <TableContainer sx={{ maxHeight: 420, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 2 }}>
+                <Table stickyHeader size="small">
+                  <TableHead>
+                    <TableRow>
+                      {['Product ID', 'Product Name', 'Crop Name', 'Batch Name / Code', 'Individual QR Number', 'Location', 'QR Code', 'Status', 'Action'].map(h => (
+                        <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, background: '#f8fafc' }}>{h}</TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {detailGroup.records
+                      .filter(r => {
+                        if (!detailSearch.trim()) return true;
+                        const q = detailSearch.trim().toLowerCase();
+                        return (
+                          (r.id && r.id.toLowerCase().includes(q)) ||
+                          (r.name && r.name.toLowerCase().includes(q)) ||
+                          (r.crop && r.crop.toLowerCase().includes(q)) ||
+                          (r.batch && r.batch.toLowerCase().includes(q)) ||
+                          (r.batchName && r.batchName.toLowerCase().includes(q)) ||
+                          (r.locationCode && r.locationCode.toLowerCase().includes(q)) ||
+                          (r.location && r.location.toLowerCase().includes(q))
+                        );
+                      })
+                      .map(r => (
+                        <TableRow key={r.id} hover>
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#1a227f' }}>
+                            {r.id}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12.5, fontWeight: 700 }}>
+                            {r.name}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12.5, color: '#334155' }}>
+                            {r.crop || r.name}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600 }}>
+                            {r.batchName || r.batch || r.batchCode || '—'}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>
+                            {r.locationCode || r.id}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12, color: '#475569' }}>
+                            {r.location || '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Box
+                                component="img"
+                                src={`${batchAPI.qrBaseUrl()}${r.qrCodeUrl}`}
+                                alt={r.id}
+                                sx={{ width: 32, height: 32, objectFit: 'contain', border: '1px solid #e2e8f0', borderRadius: 1, cursor: 'pointer' }}
+                                onClick={() => setPreviewQr(r)}
+                              />
+                              <Button
+                                size="small"
+                                variant="text"
+                                onClick={() => setPreviewQr(r)}
+                                sx={{ fontSize: 11, minWidth: 0, p: 0.5, textTransform: 'none', color: '#1a227f' }}
+                              >
+                                View
+                              </Button>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={r.status === 'filled' ? 'Filled' : 'Empty'}
+                              size="small"
+                              sx={{
+                                fontSize: 10, fontWeight: 800,
+                                background: r.status === 'filled' ? '#f0fdf4' : '#f8fafc',
+                                color: r.status === 'filled' ? '#15803d' : '#64748b',
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip title="Print this single QR label">
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  openPrintDialog({
+                                    ...detailGroup,
+                                    records: [r],
+                                  });
+                                }}
+                                sx={{ color: '#1a227f' }}
+                              >
+                                <PrintIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </DialogContent>
+            <DialogActions sx={{ px: 2.5, py: 1.5, borderTop: '1px solid #f1f5f9' }}>
+              <Button onClick={() => setDetailGroup(null)} sx={{ fontWeight: 600 }}>
+                Close
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      {/* ── 3. PRINT QR SELECTION & PREVIEW INTERFACE ── */}
+      <Dialog
+        open={Boolean(printGroup)}
+        onClose={() => setPrintGroup(null)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, maxHeight: '90vh' } }}
+      >
+        {printGroup && (
+          <>
+            <DialogTitle sx={{ p: 0 }}>
+              <Box sx={{
+                background: 'linear-gradient(135deg,#1a227f,#3d47a3)',
+                p: 2.2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff',
+              }}>
+                <Box>
+                  <Typography sx={{ fontSize: 17, fontWeight: 800 }}>
+                    Print QR Codes — {printGroup.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
+                    {selectedCount} of {printGroup.records.length} QR codes selected · {totalLabelsToPrint} total copies to print
+                  </Typography>
+                </Box>
+                <IconButton onClick={() => setPrintGroup(null)} sx={{ color: '#fff' }}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+            </DialogTitle>
+
+            <DialogContent sx={{ p: 2.5 }}>
+              {/* Tab navigation: Selection vs Preview */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Tabs value={printTab} onChange={(_, v) => setPrintTab(v)}
+                  sx={{ '& .MuiTab-root': { textTransform: 'none', fontWeight: 700, fontSize: 13, minHeight: 36 } }}>
+                  <Tab label={`1. Select QRs & Copies (${selectedCount})`} />
+                  <Tab label={`2. Print Preview (${totalLabelsToPrint} labels)`} />
+                </Tabs>
+
+                {printTab === 0 && (
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Button size="small" variant="outlined" onClick={() => toggleSelectAll(true)}
+                      sx={{ fontSize: 11, fontWeight: 700, textTransform: 'none', py: 0.3 }}>
+                      Select All
+                    </Button>
+                    <Button size="small" variant="outlined" onClick={() => toggleSelectAll(false)}
+                      sx={{ fontSize: 11, fontWeight: 700, textTransform: 'none', py: 0.3, color: '#64748b', borderColor: '#cbd5e1' }}>
+                      Deselect All
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+
+              {/* ── TAB 0: SELECTION TABLE ── */}
+              {printTab === 0 && (
+                <>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    placeholder="Search QR codes in this selection list..."
+                    value={printSearch}
+                    onChange={e => setPrintSearch(e.target.value)}
+                    InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ color: '#94a3b8', mr: 1 }} /> }}
+                    sx={{ mb: 1.5, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  />
+
+                  <TableContainer sx={{ maxHeight: 400, overflowY: 'auto', border: '1.5px solid #e2e8f0', borderRadius: 2 }}>
+                    <Table stickyHeader size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell padding="checkbox" sx={{ background: '#f8fafc' }}>
+                            <Checkbox
+                              indeterminate={selectedCount > 0 && selectedCount < printGroup.records.length}
+                              checked={printGroup.records.length > 0 && selectedCount === printGroup.records.length}
+                              onChange={(e) => toggleSelectAll(e.target.checked)}
+                              size="small"
+                            />
+                          </TableCell>
+                          {['QR Number / Product ID', 'Crop / Product', 'Batch', 'Location', 'Copies'].map(h => (
+                            <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, background: '#f8fafc' }}>{h}</TableCell>
+                          ))}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {printGroup.records
+                          .filter(r => {
+                            if (!printSearch.trim()) return true;
+                            const q = printSearch.trim().toLowerCase();
+                            return (
+                              (r.id && r.id.toLowerCase().includes(q)) ||
+                              (r.crop && r.crop.toLowerCase().includes(q)) ||
+                              (r.batch && r.batch.toLowerCase().includes(q)) ||
+                              (r.locationCode && r.locationCode.toLowerCase().includes(q))
+                            );
+                          })
+                          .map(r => {
+                            const isChecked = Boolean(selectedQrs[r.id]);
+                            const copies = copiesMap[r.id] ?? 1;
+
+                            return (
+                              <TableRow key={r.id} hover sx={{ background: isChecked ? '#f0f4ff' : '#fff' }}>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onChange={() => handleToggleQr(r.id)}
+                                    size="small"
+                                  />
+                                </TableCell>
+                                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#1a227f' }}>
+                                  {r.id}
+                                </TableCell>
+                                <TableCell sx={{ fontSize: 12.5, fontWeight: 600 }}>
+                                  {r.crop || r.name}
+                                </TableCell>
+                                <TableCell sx={{ fontSize: 12, fontFamily: 'monospace' }}>
+                                  {r.batch || r.batchCode || '—'}
+                                </TableCell>
+                                <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 600, color: '#0f172a' }}>
+                                  {r.locationCode || r.location || '—'}
+                                </TableCell>
+                                <TableCell sx={{ width: 110 }}>
+                                  <TextField
+                                    type="number"
+                                    size="small"
+                                    disabled={!isChecked}
+                                    value={isChecked ? copies : 0}
+                                    onChange={(e) => handleCopyChange(r.id, e.target.value)}
+                                    inputProps={{ min: 1, max: 99, style: { padding: '4px 8px', fontSize: 12, textAlign: 'center', fontWeight: 700 } }}
+                                    sx={{ width: 75, '& .MuiOutlinedInput-root': { borderRadius: 1.5 } }}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </>
+              )}
+
+              {/* ── TAB 1: LIVE PRINT PREVIEW ── */}
+              {printTab === 1 && (
+                <Box>
+                  {previewLabels.length === 0 ? (
+                    <Box sx={{ textAlign: 'center', py: 6, border: '2px dashed #e2e8f0', borderRadius: 2 }}>
+                      <PrintIcon sx={{ fontSize: 44, color: '#cbd5e1', mb: 1 }} />
+                      <Typography sx={{ fontWeight: 700, color: '#475569' }}>No QR codes selected</Typography>
+                      <Typography sx={{ fontSize: 12, color: '#94a3b8', mt: 0.5, mb: 2 }}>
+                        Please go back to the selection tab and select at least one QR code.
+                      </Typography>
+                      <Button size="small" variant="contained" onClick={() => setPrintTab(0)}
+                        sx={{ textTransform: 'none', background: '#1a227f' }}>
+                        Go to Selection
+                      </Button>
+                    </Box>
+                  ) : (
+                    <>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                        <Typography sx={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                          Live Preview: Showing all {previewLabels.length} labels that will be printed ({selectedCount} unique QRs)
+                        </Typography>
+                        <Chip
+                          label={`${previewLabels.length} labels ready to print`}
+                          size="small"
+                          sx={{ background: '#f0fdf4', color: '#15803d', fontWeight: 700, fontSize: 11 }}
+                        />
+                      </Box>
+                      <Box sx={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+                        gap: 1.5,
+                        maxHeight: 420,
+                        overflowY: 'auto',
+                        p: 1.5,
+                        background: '#f8fafc',
+                        borderRadius: 2,
+                        border: '1.5px solid #e2e8f0',
+                      }}>
+                        {previewLabels.map((lbl, idx) => (
+                          <Box key={`${lbl.id}-${lbl.copyIndex}-${idx}`} sx={{
+                            border: '1.5px solid #cbd5e1', borderRadius: 2, p: 1.5,
+                            background: '#fff', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                          }}>
+                            <Box
+                              component="img"
+                              src={`${batchAPI.qrBaseUrl()}${lbl.qrCodeUrl}`}
+                              alt={lbl.id}
+                              sx={{ width: 110, height: 110, objectFit: 'contain', display: 'block' }}
+                            />
+                            <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0f172a', mt: 0.8, lineHeight: 1.2 }}>
+                              {lbl.crop || lbl.name || printGroup.name}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#475569', mt: 0.3 }}>
+                              Batch: {lbl.batchName || lbl.batch || lbl.batchCode || '—'}
+                            </Typography>
+                            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: '#1a227f', fontFamily: 'monospace', mt: 0.3 }}>
+                              {lbl.locationCode || lbl.id}
+                            </Typography>
+                            <Typography sx={{ fontSize: 9.5, color: '#94a3b8', fontFamily: 'monospace', mt: 0.2 }}>
+                              {lbl.id}
+                            </Typography>
+                            {lbl.totalCopies > 1 && (
+                              <Chip
+                                label={`Copy ${lbl.copyIndex} of ${lbl.totalCopies}`}
+                                size="small"
+                                sx={{ fontSize: 9, height: 18, mt: 0.6, background: '#e0e7ff', color: '#4338ca', fontWeight: 700 }}
+                              />
+                            )}
+                          </Box>
+                        ))}
+                      </Box>
+                    </>
+                  )}
+                </Box>
+              )}
+            </DialogContent>
+
+            <DialogActions sx={{ px: 2.5, py: 1.8, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
+              <Box>
+                {printTab === 0 ? (
+                  <Button
+                    variant="outlined"
+                    disabled={selectedCount === 0}
+                    onClick={() => setPrintTab(1)}
+                    sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12.5 }}
+                  >
+                    View Print Preview ({totalLabelsToPrint} Labels)
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outlined"
+                    startIcon={<ArrowBackIcon />}
+                    onClick={() => setPrintTab(0)}
+                    sx={{ textTransform: 'none', fontWeight: 700, fontSize: 12.5 }}
+                  >
+                    Back to Selection
+                  </Button>
+                )}
+              </Box>
+
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button onClick={() => setPrintGroup(null)} sx={{ fontWeight: 600 }}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<PrintIcon />}
+                  disabled={selectedCount === 0}
+                  onClick={executePrintLabels}
+                  sx={{
+                    background: 'linear-gradient(135deg,#1a227f,#3d47a3)',
+                    fontWeight: 700,
+                    px: 2.5,
+                  }}
+                >
+                  Print {totalLabelsToPrint} Label{totalLabelsToPrint === 1 ? '' : 's'}
+                </Button>
+              </Box>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      {/* ── 4. SINGLE QR VIEWER MODAL ── */}
+      <Dialog open={Boolean(previewQr)} onClose={() => setPreviewQr(null)} maxWidth="xs" fullWidth>
+        {previewQr && (
+          <DialogContent sx={{ textAlign: 'center', p: 3 }}>
+            <Box
+              component="img"
+              src={`${batchAPI.qrBaseUrl()}${previewQr.qrCodeUrl}`}
+              alt={previewQr.id}
+              sx={{ width: 220, height: 220, objectFit: 'contain', mx: 'auto', display: 'block', border: '1px solid #e2e8f0', borderRadius: 2, p: 1 }}
+            />
+            <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#0f172a', mt: 2 }}>
+              {previewQr.crop || previewQr.name}
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: '#475569', mt: 0.5 }}>
+              Batch: {previewQr.batchName || previewQr.batch || previewQr.batchCode || '—'}
+            </Typography>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f', fontFamily: 'monospace', mt: 0.5 }}>
+              Location: {previewQr.locationCode || previewQr.id}
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', mt: 0.5 }}>
+              ID: {previewQr.id}
+            </Typography>
+            <Button
+              variant="outlined"
+              onClick={() => setPreviewQr(null)}
+              sx={{ mt: 2.5, fontWeight: 700, textTransform: 'none' }}
+            >
+              Close
+            </Button>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      {/* New Batch Dialog */}
       <NewBatchDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={(data) => {
-          setSuccessMsg(`${data.packets.length} QR codes generated for "${data.batch.batchName}"`);
+          setSuccessMsg(`${data.packets?.length || ''} QR codes generated for "${data.batch?.batchName || ''}"`);
           fetchInventory();
         }}
       />
+
       <Snackbar open={!!successMsg} autoHideDuration={5000} onClose={() => setSuccessMsg('')}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert severity="success" onClose={() => setSuccessMsg('')} sx={{ borderRadius: 2 }}>

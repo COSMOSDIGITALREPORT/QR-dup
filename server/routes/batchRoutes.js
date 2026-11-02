@@ -417,10 +417,11 @@ router.get('/inventory', protect, async (req, res) => {
   try {
     const { seedType, batchNumber, warehouse, search } = req.query;
 
-    const limit = 10;
+    const isAll = req.query.limit === 'all' || req.query.all === 'true';
+    const limit = isAll ? 0 : (req.query.limit ? Math.max(1, parseInt(req.query.limit, 10) || 10) : 1000);
     const requestedPage = parseInt(req.query.page, 10);
     const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-    const skip = (page - 1) * limit;
+    const skip = limit > 0 ? (page - 1) * limit : 0;
 
     // Dropdown options — always real, distinct values from SeedBatch.
     // Batch options narrow to the selected seed, per spec; seed options
@@ -446,19 +447,26 @@ router.get('/inventory', protect, async (req, res) => {
       { $lookup: { from: SeedPacket.collection.name, localField: '_id', foreignField: 'batchId', as: 'packets' } },
       { $unwind: '$packets' },
       { $project: {
-          _id:       '$packets._id',
-          id:        '$packets.uniqueId',
-          qrCodeUrl: '$packets.qrCodeUrl',
-          name:      '$seedType',
-          category:  '$seedCategory',
-          batch:     '$batchNumber',
-          location:  '$warehouse',
-          createdAt: '$packets.createdAt',
+          _id:          '$packets._id',
+          id:           '$packets.uniqueId',
+          qrCodeUrl:    '$packets.qrCodeUrl',
+          name:         '$seedType',
+          crop:         '$packets.crop',
+          seedCode:     '$packets.seedCode',
+          locationCode: '$packets.locationCode',
+          status:       '$packets.status',
+          serialNumber: '$packets.serialNumber',
+          category:     '$seedCategory',
+          batch:        '$batchNumber',
+          batchName:    '$batchName',
+          batchCode:    '$batchCode',
+          location:     '$warehouse',
+          createdAt:    '$packets.createdAt',
       } },
     ];
     if (search) {
       const rx = new RegExp(search, 'i');
-      pipeline.push({ $match: { $or: [{ id: rx }, { name: rx }, { batch: rx }] } });
+      pipeline.push({ $match: { $or: [{ id: rx }, { name: rx }, { batch: rx }, { crop: rx }, { locationCode: rx }] } });
     }
 
     // Counts reflect every matching packet (not just the displayed page),
@@ -474,21 +482,28 @@ router.get('/inventory', protect, async (req, res) => {
       } },
     ]);
     const counts = countsAgg[0] || { totalProducts: 0, organicCount: 0, hybridCount: 0, heirloomModifiedCount: 0 };
-    const totalPages = Math.ceil(counts.totalProducts / limit);
+    const totalPages = limit > 0 ? Math.ceil(counts.totalProducts / limit) : 1;
 
-    // Pagination is applied only to the rows returned for the table — the
-    // counts above (and totalPages) are computed from the full matching
-    // set beforehand, so cards always reflect every page, not just this one.
+    const paginationStages = [];
+    if (skip > 0) paginationStages.push({ $skip: skip });
+    if (limit > 0) paginationStages.push({ $limit: limit });
+
     const products = await SeedBatch.aggregate([
       ...pipeline,
       { $sort: { createdAt: -1 } },
-      { $skip: skip },
-      { $limit: limit },
+      ...paginationStages,
     ]);
+
+    const enrichedProducts = products.map((p) => {
+      if (!p.crop) p.crop = p.name;
+      if (!p.locationCode) p.locationCode = p.id;
+      if (!p.batchName) p.batchName = `${p.name} ${p.batch || ''}`.trim();
+      return p;
+    });
 
     res.json({
       success: true,
-      products,
+      products: enrichedProducts,
       totalProducts: counts.totalProducts,
       organicCount: counts.organicCount,
       hybridCount: counts.hybridCount,
@@ -496,7 +511,7 @@ router.get('/inventory', protect, async (req, res) => {
       seedOptions,
       batchOptions,
       warehouseOptions,
-      pagination: { page, limit, total: counts.totalProducts, totalPages },
+      pagination: { page, limit: limit || counts.totalProducts, total: counts.totalProducts, totalPages },
     });
   } catch (err) {
     sendServerError(res, err, 'batchRoutes');
