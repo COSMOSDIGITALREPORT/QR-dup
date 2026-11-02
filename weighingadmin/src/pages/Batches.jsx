@@ -8,6 +8,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
 import DownloadIcon from '@mui/icons-material/Download';
+import PrintIcon from '@mui/icons-material/Print';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CloseIcon from '@mui/icons-material/Close';
 import InventoryIcon from '@mui/icons-material/Inventory';
@@ -27,7 +28,7 @@ import { batchAPI } from '../services/api';
 // be used as-is (Step 14 rule: never prefix an absolute URL).
 const resolvePhotoUrl = (url) => {
   if (!url) return null;
-  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
   return `${batchAPI.qrBaseUrl()}${url}`;
 };
 
@@ -52,6 +53,7 @@ export default function Batches() {
   const [packets,    setPackets]    = useState([]);
   const [qrLoading,  setQrLoading]  = useState(false);
   const [dlLoading,  setDlLoading]  = useState({}); // batchId → true/false
+  const [printLoading, setPrintLoading] = useState({}); // batchId → true/false
 
   // Batch detail dialog state (Step 14) — real SeedBatch + real SeedPacket
   // data from the existing GET /api/batches/:id endpoint.
@@ -104,16 +106,86 @@ export default function Batches() {
     }
   };
 
-  const downloadQR = (qrUrl, name) => {
-    const a = document.createElement('a');
-    a.href = `${batchAPI.qrBaseUrl()}${qrUrl}`;
-    a.download = `${name}.png`;
-    a.target = '_blank';
-    a.click();
+  // Generates styled PNG download with QR Code, Crop Name below it, and individual Location Code below that
+  const downloadStyledQR = async (qrRelativeUrl, cropName, locationCode, uniqueId) => {
+    try {
+      const imgUrl = `${batchAPI.qrBaseUrl()}${qrRelativeUrl}`;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      await new Promise((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => {
+          fetch(imgUrl)
+            .then(r => r.blob())
+            .then(blob => {
+              img.src = URL.createObjectURL(blob);
+              img.onload = () => resolve();
+              img.onerror = reject;
+            })
+            .catch(reject);
+        };
+        img.src = imgUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      const width = 450;
+      const height = 550;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      // White background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      // Card subtle border
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(3, 3, width - 6, height - 6);
+
+      // Draw QR code centered (350x350)
+      const qrSize = 350;
+      const qrX = (width - qrSize) / 2;
+      const qrY = 25;
+      ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
+
+      // Text 1: Crop Name (bold)
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(cropName || 'Seed Batch', width / 2, 415);
+
+      // Text 2: Individual Location Code (bold monospace)
+      ctx.fillStyle = '#1a227f';
+      ctx.font = 'bold 20px "Courier New", Courier, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(locationCode || '', width / 2, 452);
+
+      // Text 3: Packet ID
+      ctx.fillStyle = '#64748b';
+      ctx.font = '13px "Courier New", Courier, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(uniqueId, width / 2, 485);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      const safeLoc = locationCode ? locationCode.replace(/\s+/g, '') : '';
+      a.download = `${uniqueId}${safeLoc ? `_${safeLoc}` : ''}.png`;
+      a.click();
+    } catch {
+      // Direct fallback
+      const a = document.createElement('a');
+      a.href = `${batchAPI.qrBaseUrl()}${qrRelativeUrl}`;
+      a.download = `${uniqueId}.png`;
+      a.target = '_blank';
+      a.click();
+    }
   };
 
   const downloadAll = () => {
-    packets.forEach((p, i) => setTimeout(() => downloadQR(p.qrCodeUrl, p.uniqueId), i * 80));
+    packets.forEach((p, i) => setTimeout(() => downloadStyledQR(p.qrCodeUrl, p.crop || qrBatch?.seedType, p.locationCode, p.uniqueId), i * 150));
   };
 
   const downloadBatch = async (batch) => {
@@ -121,9 +193,172 @@ export default function Batches() {
     try {
       const { data } = await batchAPI.qrList(batch._id);
       const pkts = data.packets || [];
-      pkts.forEach((p, i) => setTimeout(() => downloadQR(p.qrCodeUrl, p.uniqueId), i * 80));
+      pkts.forEach((p, i) => setTimeout(() => downloadStyledQR(p.qrCodeUrl, p.crop || batch.crop || batch.seedType, p.locationCode, p.uniqueId), i * 150));
     } catch { /* silent */ }
     finally { setDlLoading(prev => ({ ...prev, [batch._id]: false })); }
+  };
+
+  // Printable layout displaying QR code, Crop Name below QR code, and individual Location Code below Crop Name
+  const handlePrintBatch = async (batch) => {
+    setPrintLoading(prev => ({ ...prev, [batch._id]: true }));
+    try {
+      const { data } = await batchAPI.qrList(batch._id);
+      const pkts = data.packets || [];
+      if (pkts.length === 0) {
+        alert('No QR codes available to print for this batch.');
+        return;
+      }
+
+      const printWin = window.open('', '_blank');
+      if (!printWin) {
+        alert('Please allow popups to print QR codes.');
+        return;
+      }
+
+      const baseUrl = batchAPI.qrBaseUrl();
+      const cardsHtml = pkts.map(p => {
+        const cropName = p.crop || batch.crop || batch.seedType || 'Seed';
+        const locCode = p.locationCode || '';
+        const imgFullUrl = `${baseUrl}${p.qrCodeUrl}`;
+        return `
+          <div class="sticker-card">
+            <img class="qr-img" src="${imgFullUrl}" alt="${p.uniqueId}" />
+            <div class="crop-name">${cropName}</div>
+            <div class="loc-code">${locCode}</div>
+            <div class="pkt-id">${p.uniqueId}</div>
+          </div>
+        `;
+      }).join('');
+
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Print QR Codes - ${batch.batchName}</title>
+          <style>
+            @page {
+              size: auto;
+              margin: 8mm;
+            }
+            * { box-sizing: border-box; }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+              margin: 0;
+              padding: 16px;
+              color: #0f172a;
+              background: #fff;
+            }
+            .header-bar {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding-bottom: 12px;
+              margin-bottom: 16px;
+              border-bottom: 2px solid #e2e8f0;
+            }
+            .title {
+              font-size: 20px;
+              font-weight: 800;
+              color: #1a227f;
+              margin: 0;
+            }
+            .subtitle {
+              font-size: 13px;
+              color: #64748b;
+              margin-top: 4px;
+            }
+            .btn-print {
+              background: #1a227f;
+              color: #fff;
+              border: none;
+              padding: 9px 20px;
+              border-radius: 6px;
+              font-size: 14px;
+              font-weight: 700;
+              cursor: pointer;
+            }
+            .stickers-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+              gap: 16px;
+            }
+            .sticker-card {
+              border: 1.5px solid #cbd5e1;
+              border-radius: 8px;
+              padding: 12px;
+              text-align: center;
+              background: #ffffff;
+              page-break-inside: avoid;
+              break-inside: avoid;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+            }
+            .qr-img {
+              width: 140px;
+              height: 140px;
+              object-fit: contain;
+              display: block;
+            }
+            .crop-name {
+              font-size: 15px;
+              font-weight: 800;
+              color: #0f172a;
+              margin-top: 8px;
+              line-height: 1.2;
+            }
+            .loc-code {
+              font-size: 13px;
+              font-weight: 700;
+              color: #1a227f;
+              margin-top: 4px;
+              font-family: monospace;
+              letter-spacing: 0.04em;
+            }
+            .pkt-id {
+              font-size: 10px;
+              color: #64748b;
+              margin-top: 3px;
+              font-family: monospace;
+            }
+            @media print {
+              .header-bar { display: none !important; }
+              body { padding: 0; }
+              .stickers-grid {
+                gap: 10px;
+              }
+              .sticker-card {
+                border: 1px solid #94a3b8;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header-bar">
+            <div>
+              <h1 class="title">${batch.batchName}</h1>
+              <div class="subtitle">${pkts.length} QR Stickers · Ready to Print</div>
+            </div>
+            <button class="btn-print" onclick="window.print()">Print Labels</button>
+          </div>
+          <div class="stickers-grid">
+            ${cardsHtml}
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); }, 400);
+            };
+          </script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    } catch (err) {
+      alert('Failed to load QR codes for printing');
+    } finally {
+      setPrintLoading(prev => ({ ...prev, [batch._id]: false }));
+    }
   };
 
   // Aggregate stats
@@ -192,6 +427,7 @@ export default function Batches() {
             const gradient = GRADIENTS[idx % GRADIENTS.length];
             const first   = `PRD-${SC}${BC}-001`;
             const last    = `PRD-${SC}${BC}-${String(b.count).padStart(3,'0')}`;
+            const hasMultipleSeeds = b.seeds && b.seeds.length > 1;
 
             return (
               <Box key={b._id} sx={{
@@ -211,25 +447,49 @@ export default function Batches() {
                   <Box sx={{ position:'absolute', top:-18, right:-18, width:60, height:60, borderRadius:'50%', background:'rgba(255,255,255,0.1)' }} />
                   <Typography sx={{ fontSize: 22, fontWeight: 900, color: '#fff', lineHeight: 1 }}>{SC}</Typography>
                   <Typography sx={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 600, fontFamily: 'monospace' }}>{BC}</Typography>
+                  {hasMultipleSeeds && (
+                    <Chip label={`+${b.seeds.length - 1}`} size="small"
+                      sx={{ background: 'rgba(255,255,255,0.25)', color: '#fff', fontWeight: 800, fontSize: 9, height: 16, mt: 0.4 }} />
+                  )}
                 </Box>
 
                 {/* Main content */}
                 <Box sx={{ flex: 1, p: 2.5, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', minWidth: 0 }}>
 
                   {/* Batch info */}
-                  <Box sx={{ minWidth: 160, flex: '1 1 160px' }}>
-                    <Chip label={b.seedType} size="small"
-                      sx={{ background: 'rgba(26,34,127,0.08)', color: '#1a227f', fontWeight: 700, fontSize: 10, mb: 0.8, height: 20 }} />
+                  <Box sx={{ minWidth: 180, flex: '1 1 180px' }}>
+                    {b.seeds && b.seeds.length > 0 ? (
+                      <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap', mb: 0.8 }}>
+                        {b.seeds.map((s, sIdx) => (
+                          <Chip
+                            key={sIdx}
+                            label={`${s.crop || s.seedType}${s.batchNumber ? ` (${s.batchNumber})` : ''}`}
+                            size="small"
+                            sx={{
+                              background: 'rgba(26,34,127,0.08)',
+                              color: '#1a227f',
+                              fontWeight: 700,
+                              fontSize: 10,
+                              height: 20,
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    ) : (
+                      <Chip label={b.seedType} size="small"
+                        sx={{ background: 'rgba(26,34,127,0.08)', color: '#1a227f', fontWeight: 700, fontSize: 10, mb: 0.8, height: 20 }} />
+                    )}
                     <Typography sx={{ fontSize: 15, fontWeight: 800, color: '#0f172a', lineHeight: 1.3 }}>
                       {b.batchName}
                     </Typography>
                     <Typography sx={{ fontSize: 11, color: '#94a3b8', mt: 0.3, fontFamily: 'monospace' }}>
-                      {b.batchNumber} · {new Date(b.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}
+                      {hasMultipleSeeds ? `${b.seeds.length} Seed Types · ` : (b.batchNumber ? `${b.batchNumber} · ` : '')}
+                      {new Date(b.createdAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}
                     </Typography>
                   </Box>
 
                   {/* QR Range */}
-                  <Box sx={{ minWidth: 180, flex: '1 1 180px' }}>
+                  <Box sx={{ minWidth: 160, flex: '1 1 160px' }}>
                     <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', mb: 0.5 }}>QR ID RANGE</Typography>
                     <Typography sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#1a227f' }}>{first}</Typography>
                     <Typography sx={{ fontFamily: 'monospace', fontSize: 11, color: '#64748b' }}>→ {last}</Typography>
@@ -250,7 +510,7 @@ export default function Batches() {
                   </Box>
 
                   {/* Progress */}
-                  <Box sx={{ minWidth: 120, flex: '1 1 120px' }}>
+                  <Box sx={{ minWidth: 110, flex: '1 1 110px' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography sx={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>Fill progress</Typography>
                       <Typography sx={{ fontSize: 10, fontWeight: 700, color: pct === 100 ? '#15803d' : '#1a227f' }}>{pct}%</Typography>
@@ -272,7 +532,7 @@ export default function Batches() {
                       onClick={() => openDetailDialog(b)}
                       sx={{
                         borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
-                        borderColor: '#e2e8f0', color: '#1a227f', px: 2,
+                        borderColor: '#e2e8f0', color: '#1a227f', px: 1.8,
                         '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
                       }}>
                       Details
@@ -281,10 +541,20 @@ export default function Batches() {
                       onClick={() => openQRDrawer(b)}
                       sx={{
                         borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
-                        borderColor: '#e2e8f0', color: '#1a227f', px: 2,
+                        borderColor: '#e2e8f0', color: '#1a227f', px: 1.8,
                         '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
                       }}>
                       View QRs
+                    </Button>
+                    <Button variant="outlined" startIcon={<PrintIcon />}
+                      onClick={() => handlePrintBatch(b)}
+                      disabled={!!printLoading[b._id]}
+                      sx={{
+                        borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                        borderColor: '#e2e8f0', color: '#1a227f', px: 1.8,
+                        '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
+                      }}>
+                      {printLoading[b._id] ? <CircularProgress size={14} color="inherit" /> : 'Print'}
                     </Button>
                     <Tooltip title={`Download all ${b.count} QR codes`}>
                       <Button variant="contained"
@@ -316,7 +586,7 @@ export default function Batches() {
           <>
             <DialogTitle sx={{ p: 0 }}>
               <Box sx={{
-                background: GRADIENTS[batches.findIndex(b => b._id === qrBatch._id) % GRADIENTS.length],
+                background: GRADIENTS[batches.findIndex(b => b._id === qrBatch._id) % GRADIENTS.length] || GRADIENTS[0],
                 p: 2.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               }}>
                 <Box>
@@ -326,6 +596,11 @@ export default function Batches() {
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Button variant="contained" startIcon={<PrintIcon />} onClick={() => handlePrintBatch(qrBatch)}
+                    disabled={qrLoading || packets.length === 0}
+                    sx={{ background: 'rgba(255,255,255,0.2)', '&:hover': { background: 'rgba(255,255,255,0.3)' }, borderRadius: 2, fontSize: 12 }}>
+                    Print All
+                  </Button>
                   <Button variant="contained" startIcon={<DownloadIcon />} onClick={downloadAll}
                     disabled={qrLoading || packets.length === 0}
                     sx={{ background: 'rgba(255,255,255,0.2)', '&:hover': { background: 'rgba(255,255,255,0.3)' }, borderRadius: 2, fontSize: 12 }}>
@@ -361,12 +636,11 @@ export default function Batches() {
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
                     {packets.map(pkt => (
                       <Box key={pkt.uniqueId} sx={{
-                        display: 'flex', alignItems: 'center', gap: 0.8,
-                        px: 1.5, py: 0.7, borderRadius: 2,
+                        display: 'flex', alignItems: 'center', gap: 1,
+                        px: 1.5, py: 0.8, borderRadius: 2,
                         border: '1.5px solid',
                         borderColor: pkt.status === 'filled' ? '#bbf7d0' : '#e2e8f0',
                         background: pkt.status === 'filled' ? '#f0fdf4' : '#fafafa',
-                        cursor: 'pointer',
                         '&:hover': { borderColor: '#1a227f', background: '#f0f4ff' },
                       }}>
                         <Box sx={{
@@ -374,11 +648,18 @@ export default function Batches() {
                           background: pkt.status === 'filled' ? '#16a34a' : '#cbd5e1',
                           flexShrink: 0,
                         }} />
-                        <Typography sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                          {pkt.uniqueId}
-                        </Typography>
-                        <Tooltip title="Download QR">
-                          <IconButton size="small" onClick={() => downloadQR(pkt.qrCodeUrl, pkt.uniqueId)}
+                        <Box>
+                          <Typography sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                            {pkt.uniqueId}
+                          </Typography>
+                          {(pkt.crop || pkt.locationCode) && (
+                            <Typography sx={{ fontSize: 9.5, color: '#64748b', fontWeight: 600 }}>
+                              {pkt.crop ? `${pkt.crop} · ` : ''}{pkt.locationCode || ''}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Tooltip title="Download Styled QR">
+                          <IconButton size="small" onClick={() => downloadStyledQR(pkt.qrCodeUrl, pkt.crop || qrBatch.seedType, pkt.locationCode, pkt.uniqueId)}
                             sx={{ p: 0.2, color: '#94a3b8', '&:hover': { color: '#1a227f' } }}>
                             <DownloadIcon sx={{ fontSize: 14 }} />
                           </IconButton>
@@ -447,26 +728,80 @@ export default function Batches() {
                     ))}
                   </Grid>
 
-                  {/* Seed-management details saved with the batch — read straight
-                      from the SeedBatch document; blank where nothing was entered. */}
-                  <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', mb: 1 }}>SEED MANAGEMENT DETAILS</Typography>
-                  <Grid container spacing={1.2} sx={{ mb: 2.5 }}>
-                    {BATCH_DETAIL_FIELDS.map(f => {
-                      const value = detailBatch[f.name];
-                      const shown = value === null || value === undefined || value === '' ? '—' : String(value);
-                      return (
-                        <Grid size={{ xs: 12, sm: f.multiline ? 12 : 6, md: f.multiline ? 6 : 3 }} key={f.name}>
-                          <Box sx={{ background: '#f8fafc', borderRadius: 2, px: 1.2, py: 0.8, border: '1px solid #f1f5f9', height: '100%' }}>
-                            <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, letterSpacing: '0.04em' }}>{f.label}</Typography>
-                            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{shown}</Typography>
-                          </Box>
-                        </Grid>
-                      );
-                    })}
-                  </Grid>
+                  {/* Seed entries in this batch */}
+                  {detailBatch.seeds && detailBatch.seeds.length > 0 ? (
+                    <Box sx={{ mb: 2.5 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 800, color: '#1a227f', letterSpacing: '0.06em', mb: 1, textTransform: 'uppercase' }}>
+                        Seed Entries in this Batch ({detailBatch.seeds.length})
+                      </Typography>
+                      <Grid container spacing={1.5}>
+                        {detailBatch.seeds.map((s, sIdx) => (
+                          <Grid size={{ xs: 12, md: detailBatch.seeds.length > 1 ? 6 : 12 }} key={sIdx}>
+                            <Box sx={{
+                              p: 1.8, borderRadius: 2.5, border: '1.5px solid #e2e8f0',
+                              background: '#f8fafc',
+                            }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.2 }}>
+                                <Typography sx={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>
+                                  #{sIdx + 1} {s.crop || s.seedType}
+                                </Typography>
+                                <Chip
+                                  label={`${s.count || 0} QRs`}
+                                  size="small"
+                                  sx={{ background: '#1a227f', color: '#fff', fontWeight: 800, fontSize: 11, height: 22 }}
+                                />
+                              </Box>
+                              <Grid container spacing={1}>
+                                {[
+                                  ['Crop Name', s.crop || s.seedType || '—'],
+                                  ['Seed Code', s.seedCode || '—'],
+                                  ['Seed Type', s.seedCategory || '—'],
+                                  ['Location', s.locationCode || (s.land && s.line ? `${s.land} - ${s.line} - ${s.count}` : '—')],
+                                  ['Previous Year', s.previousYear ?? '—'],
+                                  ['Previous Location', s.previousLocationCode || '—'],
+                                  ['Gean', s.gene || '—'],
+                                  ['Comments', s.comments || '—'],
+                                ].map(([label, val]) => (
+                                  <Grid size={{ xs: 6, sm: 3 }} key={label}>
+                                    <Box sx={{ background: '#fff', p: 0.8, borderRadius: 1.5, border: '1px solid #f1f5f9' }}>
+                                      <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>
+                                        {label}
+                                      </Typography>
+                                      <Typography sx={{ fontSize: 12, fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>
+                                        {val}
+                                      </Typography>
+                                    </Box>
+                                  </Grid>
+                                ))}
+                              </Grid>
+                            </Box>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Box>
+                  ) : (
+                    <>
+                      {/* Seed-management details for older batches */}
+                      <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', mb: 1 }}>SEED MANAGEMENT DETAILS</Typography>
+                      <Grid container spacing={1.2} sx={{ mb: 2.5 }}>
+                        {BATCH_DETAIL_FIELDS.map(f => {
+                          const value = detailBatch[f.name];
+                          const shown = value === null || value === undefined || value === '' ? '—' : String(value);
+                          return (
+                            <Grid size={{ xs: 12, sm: f.multiline ? 12 : 6, md: f.multiline ? 6 : 3 }} key={f.name}>
+                              <Box sx={{ background: '#f8fafc', borderRadius: 2, px: 1.2, py: 0.8, border: '1px solid #f1f5f9', height: '100%' }}>
+                                <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, letterSpacing: '0.04em' }}>{f.label}</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{shown}</Typography>
+                              </Box>
+                            </Grid>
+                          );
+                        })}
+                      </Grid>
+                    </>
+                  )}
 
                   <TextField
-                    size="small" fullWidth placeholder="Search Packet ID…"
+                    size="small" fullWidth placeholder="Search Packet ID, Crop, or Location…"
                     value={packetSearch} onChange={e => setPacketSearch(e.target.value)}
                     InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" sx={{ color: '#94a3b8' }} /></InputAdornment> }}
                     sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
@@ -476,22 +811,24 @@ export default function Batches() {
                     <Table stickyHeader size="small">
                       <TableHead>
                         <TableRow>
-                          {['Packet ID', 'Status', 'Before', 'After', 'Difference', 'Before Photo', 'After Photo', 'Operator', 'Device ID', 'Weighed'].map(h => <TableCell key={h}>{h}</TableCell>)}
+                          {['Packet ID', 'Crop', 'Location', 'Status', 'Before', 'After', 'Difference', 'Before Photo', 'After Photo', 'Operator', 'Device ID', 'Weighed'].map(h => <TableCell key={h}>{h}</TableCell>)}
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {detailPackets.filter(p => !packetSearch || p.uniqueId.toLowerCase().includes(packetSearch.toLowerCase())).length === 0 ? (
-                          <TableRow><TableCell colSpan={10} align="center" sx={{ py: 3, color: '#94a3b8' }}>
+                        {detailPackets.filter(p => !packetSearch || p.uniqueId.toLowerCase().includes(packetSearch.toLowerCase()) || (p.crop && p.crop.toLowerCase().includes(packetSearch.toLowerCase())) || (p.locationCode && p.locationCode.toLowerCase().includes(packetSearch.toLowerCase()))).length === 0 ? (
+                          <TableRow><TableCell colSpan={12} align="center" sx={{ py: 3, color: '#94a3b8' }}>
                             {detailPackets.length === 0 ? 'This batch has no packets' : 'No packets match your search'}
                           </TableCell></TableRow>
                         ) : detailPackets
-                            .filter(p => !packetSearch || p.uniqueId.toLowerCase().includes(packetSearch.toLowerCase()))
+                            .filter(p => !packetSearch || p.uniqueId.toLowerCase().includes(packetSearch.toLowerCase()) || (p.crop && p.crop.toLowerCase().includes(packetSearch.toLowerCase())) || (p.locationCode && p.locationCode.toLowerCase().includes(packetSearch.toLowerCase())))
                             .map(p => {
                               const beforeUrl = resolvePhotoUrl(p.beforePhotoUrl);
                               const afterUrl  = resolvePhotoUrl(p.afterPhotoUrl);
                               return (
                                 <TableRow key={p.uniqueId} hover>
                                   <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#1a227f' }}>{p.uniqueId}</TableCell>
+                                  <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{p.crop || detailBatch.crop || detailBatch.seedType || '—'}</TableCell>
+                                  <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: '#334155' }}>{p.locationCode || '—'}</TableCell>
                                   <TableCell>
                                     <Chip label={p.status === 'filled' ? 'Filled' : 'Empty'} size="small"
                                       sx={{ fontSize: 10, fontWeight: 800, background: p.status === 'filled' ? '#f0fdf4' : '#f8fafc', color: p.status === 'filled' ? '#15803d' : '#64748b' }} />
@@ -547,7 +884,6 @@ export default function Batches() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={(data) => {
-          // Only ever called after a real successful POST /api/batches.
           setSuccessMsg(`${data.batch.batchName} saved — ${data.message}`);
           fetchBatches();
         }}

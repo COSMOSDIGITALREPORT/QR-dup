@@ -6,6 +6,13 @@ const SeedPacketSchema = new mongoose.Schema({
   qrCodeUrl:    { type: String, default: '' },
   status:       { type: String, enum: ['empty', 'filled'], default: 'empty' },
 
+  // Seed / location details for this packet
+  crop:         { type: String, default: '' },
+  seedType:     { type: String, default: '' },
+  seedCode:     { type: String, default: '' },
+  locationCode: { type: String, default: '' },
+  serialNumber: { type: Number, default: null },
+
   // Filled after session linked
   photoUrl:       { type: String, default: '' },
   // Cloudinary secure_url per phase (seed-passport/before|after/<uniqueId>).

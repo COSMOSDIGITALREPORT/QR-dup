@@ -59,6 +59,24 @@ const SeedBatchSchema = new mongoose.Schema({
 
   ...detailPaths,
 
+  // Seed entries grouped under this batch (supports multiple seed types in one batch)
+  seeds:       [{
+    crop:                 { type: String, default: '' },
+    seedType:             { type: String, default: '' },
+    seedCategory:         { type: String, default: '' },
+    seedCode:             { type: String, default: '' },
+    batchNumber:          { type: String, default: '' },
+    batchCode:            { type: String, default: '' },
+    count:                { type: Number, default: 0 },
+    land:                 { type: String, default: '' },
+    line:                 { type: String, default: '' },
+    locationCode:         { type: String, default: '' },
+    previousYear:         { type: Number, default: null },
+    previousLocationCode: { type: String, default: '' },
+    gene:                 { type: String, default: '' },
+    comments:             { type: String, default: '' },
+  }],
+
   packets:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'SeedPacket' }],
   createdBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 }, { timestamps: true });

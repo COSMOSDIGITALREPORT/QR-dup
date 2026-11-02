@@ -144,10 +144,8 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
 
     try {
       setCreating(true);
-      const createdResponses = [];
 
-      for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
+      const formattedEntries = entries.map(entry => {
         const parsed = parseLocation(entry.location);
         const land = parsed.land;
         const line = parsed.line;
@@ -156,32 +154,36 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
         const batchCd = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'B1';
         const sc = entry.seedCode.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'SC';
 
-        const payload = {
-          batchName: `${entry.cropName.trim()} ${batchNum}`,
+        return {
+          cropName: entry.cropName.trim(),
+          crop: entry.cropName.trim(),
           seedType: entry.cropName.trim(),
           seedCategory: entry.seedCategory || '',
           seedCode: sc,
           batchNumber: batchNum,
           batchCode: batchCd,
           count: count,
-          crop: entry.cropName.trim(),
+          land: land,
+          line: line,
+          location: entry.location.trim(),
           locationCode: entry.location.trim(),
           previousYear: entry.previousYear && String(entry.previousYear).trim() ? Number(entry.previousYear) : null,
+          previousLocation: entry.previousLocation?.trim() || '',
           previousLocationCode: entry.previousLocation?.trim() || '',
+          gean: entry.gean?.trim() || '',
           gene: entry.gean?.trim() || '',
           comments: entry.comments?.trim() || '',
         };
+      });
 
-        const res = await batchAPI.create(payload);
-        if (!res.data.success || !res.data.batch?._id) {
-          throw new Error(res.data.message || `Failed to create batch for entry #${i + 1}`);
-        }
-        createdResponses.push(res.data);
+      const res = await batchAPI.create({ entries: formattedEntries });
+      if (!res.data.success || !res.data.batch?._id) {
+        throw new Error(res.data.message || 'Failed to create batch');
       }
 
       setEntries([createInitialEntry()]);
       setCreateError('');
-      onCreated?.(createdResponses[0]);
+      onCreated?.(res.data);
       onClose();
     } catch (err) {
       setCreateError(err.response?.data?.message || err.message || 'Error creating batch');

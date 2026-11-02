@@ -10,6 +10,20 @@ const { sendServerError } = require('../utils/errorResponse');
 
 const { DETAIL_FIELDS, DETAIL_TEXT_MAX_LENGTH } = SeedBatch;
 
+function parseLocationString(loc) {
+  if (!loc || typeof loc !== 'string') return null;
+  const parts = loc.split(/\s*-\s*/).map(s => s.trim()).filter(Boolean);
+  if (parts.length === 3) {
+    const land = parts[0];
+    const line = parts[1];
+    const count = parseInt(parts[2], 10);
+    if (land && line && !isNaN(count) && count > 0) {
+      return { land, line, count };
+    }
+  }
+  return null;
+}
+
 // Validates the optional seed-management details of a new batch (see
 // DETAIL_FIELDS in SeedBatch.js). Nothing is required and nothing is derived:
 // a field that was not sent is stored blank, and Total is whatever was
@@ -77,6 +91,194 @@ function resolveQrBaseUrl() {
 // create batches of up to 5000 packets with no role check at all.
 router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) => {
   try {
+    const baseUrl = resolveQrBaseUrl();
+
+    // Check if multi-seed entries are submitted
+    if (Array.isArray(req.body.entries) && req.body.entries.length > 0) {
+      const rawEntries = req.body.entries;
+      const processedEntries = [];
+      let totalCount = 0;
+
+      for (let i = 0; i < rawEntries.length; i++) {
+        const e = rawEntries[i];
+        const prefix = rawEntries.length > 1 ? `[Entry #${i + 1}] ` : '';
+        const cropName = (e.cropName || e.crop || e.seedType || '').trim();
+        if (!cropName) {
+          return res.status(400).json({ success: false, message: `${prefix}cropName required` });
+        }
+        const sc = (e.seedCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (!sc) {
+          return res.status(400).json({ success: false, message: `${prefix}seedCode required` });
+        }
+        const loc = (e.location || e.locationCode || '').trim();
+        const parsed = parseLocationString(loc);
+        if (!parsed) {
+          return res.status(400).json({ success: false, message: `${prefix}location must follow Land - Line - Count (e.g. R - 2 - 24)` });
+        }
+        if (parsed.count < 1 || parsed.count > 5000) {
+          return res.status(400).json({ success: false, message: `${prefix}count must be 1–5000` });
+        }
+
+        const batchNum = e.batchNumber || `${parsed.land}-${parsed.line}`;
+        const batchCd = (e.batchCode || `${parsed.land}${parsed.line}`).replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'B1';
+
+        totalCount += parsed.count;
+        processedEntries.push({
+          cropName,
+          seedType: cropName,
+          seedCategory: e.seedCategory || '',
+          seedCode: sc,
+          batchNumber: batchNum,
+          batchCode: batchCd,
+          land: parsed.land,
+          line: parsed.line,
+          count: parsed.count,
+          location: loc,
+          previousYear: e.previousYear ? Number(e.previousYear) : null,
+          previousLocationCode: e.previousLocation || e.previousLocationCode || '',
+          gene: e.gean || e.gene || '',
+          comments: e.comments || '',
+          index: i,
+        });
+      }
+
+      if (totalCount < 1 || totalCount > 5000) {
+        return res.status(400).json({ success: false, message: 'Total count across all seed entries must be 1–5000' });
+      }
+
+      const first = processedEntries[0];
+      const batchName = req.body.batchName || (
+        processedEntries.length === 1
+          ? `${first.cropName} ${first.batchNumber}`
+          : processedEntries.map(e => `${e.cropName} (${e.batchNumber})`).join(', ')
+      );
+      const seedType = processedEntries.map(e => e.cropName).join(', ');
+      const seedCategory = processedEntries.map(e => e.seedCategory).filter(Boolean).join(', ') || '';
+      const batchNumber = processedEntries.map(e => e.batchNumber).join(', ');
+
+      const seedsData = processedEntries.map(e => ({
+        crop: e.cropName,
+        seedType: e.seedType,
+        seedCategory: e.seedCategory,
+        seedCode: e.seedCode,
+        batchNumber: e.batchNumber,
+        batchCode: e.batchCode,
+        count: e.count,
+        land: e.land,
+        line: e.line,
+        locationCode: e.location,
+        previousYear: e.previousYear,
+        previousLocationCode: e.previousLocationCode,
+        gene: e.gene,
+        comments: e.comments,
+      }));
+
+      const batch = await SeedBatch.create({
+        batchName,
+        seedType,
+        seedCategory,
+        seedCode: first.seedCode,
+        batchNumber,
+        batchCode: first.batchCode,
+        count: totalCount,
+        crop: first.cropName,
+        locationCode: first.location,
+        previousYear: first.previousYear,
+        previousLocationCode: first.previousLocationCode,
+        gene: first.gene,
+        comments: first.comments,
+        seeds: seedsData,
+        createdBy: req.admin._id,
+      });
+
+      const packetDefs = [];
+      const usedUniqueIds = new Set();
+      for (const entry of processedEntries) {
+        const sc = entry.seedCode;
+        const bc = entry.batchCode;
+        for (let i = 1; i <= entry.count; i++) {
+          let uniqueId = `PRD-${sc}${bc}-${String(i).padStart(3, '0')}`;
+          if (usedUniqueIds.has(uniqueId)) {
+            uniqueId = `PRD-${sc}${bc}-${entry.index + 1}-${String(i).padStart(3, '0')}`;
+          }
+          usedUniqueIds.add(uniqueId);
+          packetDefs.push({
+            uniqueId,
+            fileName: `${uniqueId}.png`,
+            crop: entry.cropName,
+            seedType: entry.seedType,
+            seedCode: sc,
+            locationCode: `${entry.land} - ${entry.line} - ${i}`,
+            serialNumber: i,
+          });
+        }
+      }
+
+      const uploadedFileIds = [];
+      try {
+        await Promise.all(packetDefs.map(async (def) => {
+          const buffer = await QRCode.toBuffer(`${baseUrl}/scan/${def.uniqueId}`, {
+            type: 'png', width: 400, margin: 2,
+            color: { dark: '#1a227f', light: '#ffffff' },
+          });
+          def.fileId = await uploadQrPng(buffer, def.fileName, {
+            uniqueId: def.uniqueId,
+            batchId:  String(batch._id),
+          });
+          uploadedFileIds.push(def.fileId);
+        }));
+      } catch (err) {
+        await Promise.all(uploadedFileIds.map(id => deleteQrFile(id)));
+        throw err;
+      }
+
+      const packets = packetDefs.map(def => ({
+        uniqueId:     def.uniqueId,
+        batchId:      batch._id,
+        qrCodeUrl:    `/api/qr/${def.fileId}`,
+        status:       'empty',
+        crop:         def.crop,
+        seedType:     def.seedType,
+        seedCode:     def.seedCode,
+        locationCode: def.locationCode,
+        serialNumber: def.serialNumber,
+      }));
+
+      const created = await SeedPacket.insertMany(packets);
+      batch.packets = created.map(p => p._id);
+      await batch.save();
+
+      return res.status(201).json({
+        success: true,
+        message: `${totalCount} QR codes generated`,
+        batch: {
+          _id:          batch._id,
+          batchName:    batch.batchName,
+          seedType:     batch.seedType,
+          seedCategory: batch.seedCategory,
+          seedCode:     batch.seedCode,
+          batchNumber:  batch.batchNumber,
+          batchCode:    batch.batchCode,
+          count:        batch.count,
+          month:        batch.month,
+          year:         batch.year,
+          warehouse:    batch.warehouse,
+          rack:         batch.rack,
+          shelf:        batch.shelf,
+          seeds:        batch.seeds,
+          ...Object.fromEntries(DETAIL_FIELDS.map(({ field }) => [field, batch[field]])),
+          createdAt:    batch.createdAt,
+        },
+        packets: created.map(p => ({
+          uniqueId:     p.uniqueId,
+          qrCodeUrl:    p.qrCodeUrl,
+          crop:         p.crop,
+          locationCode: p.locationCode,
+        })),
+      });
+    }
+
+    // Single-entry legacy flow
     const { batchName, seedType, seedCategory, seedCode, batchNumber, batchCode, count, month, year, warehouse, rack, shelf } = req.body;
 
     if (!seedCode || !batchCode || !count) {
@@ -88,11 +290,6 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
       return res.status(400).json({ success: false, message: 'count must be 1–5000' });
     }
 
-    // Resolved before any write — a misconfigured PUBLIC_BASE_URL in
-    // production must fail here, not after a SeedBatch is already saved.
-    const baseUrl = resolveQrBaseUrl();
-
-    // Optional storage/period fields — validated only when provided, never required
     const parsedMonth = (month !== undefined && month !== null && month !== '') ? parseInt(month) : null;
     if (parsedMonth !== null && (isNaN(parsedMonth) || parsedMonth < 1 || parsedMonth > 12)) {
       return res.status(400).json({ success: false, message: 'month must be 1–12' });
@@ -102,8 +299,6 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
       return res.status(400).json({ success: false, message: 'year must be a number' });
     }
 
-    // Seed-management details — also checked before any write, so a rejected
-    // value never leaves a batch or QR file behind.
     const { clean: details, error: detailError } = parseDetailFields(req.body);
     if (detailError) {
       return res.status(400).json({ success: false, message: detailError });
@@ -121,9 +316,6 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
       ...details,
     });
 
-    // Generate all QR PNGs in parallel (much faster than sequential), each
-    // uploaded straight to the 'qr' GridFS bucket as an in-memory Buffer —
-    // no filesystem write, so nothing is lost on Render's ephemeral disk.
     const packetDefs = Array.from({ length: total }, (_, i) => {
       const serial   = String(i + 1).padStart(3, '0');
       const uniqueId = `PRD-${SC}${BC}-${serial}`;
@@ -134,7 +326,7 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
     const uploadedFileIds = [];
     try {
       await Promise.all(packetDefs.map(async (def) => {
-        const buffer = await QRCode.toBuffer(`${baseUrl}/scan/${def.uniqueId}`, {  // URL so phone opens a page on scan
+        const buffer = await QRCode.toBuffer(`${baseUrl}/scan/${def.uniqueId}`, {
           type: 'png', width: 400, margin: 2,
           color: { dark: '#1a227f', light: '#ffffff' },
         });
@@ -145,9 +337,6 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
         uploadedFileIds.push(def.fileId);
       }));
     } catch (err) {
-      // A sibling upload failed mid-batch — clean up whatever already
-      // succeeded so it doesn't become an orphan GridFS file, then fail the
-      // whole request clearly (no SeedPacket documents are created below).
       await Promise.all(uploadedFileIds.map(id => deleteQrFile(id)));
       throw err;
     }
@@ -318,9 +507,27 @@ router.get('/inventory', protect, async (req, res) => {
 router.get('/:id/qr-list', protect, async (req, res) => {
   try {
     const packets = await SeedPacket.find({ batchId: req.params.id })
-      .select('uniqueId qrCodeUrl status')
+      .select('uniqueId qrCodeUrl status crop locationCode seedType serialNumber')
       .sort({ uniqueId: 1 });
-    res.json({ success: true, packets });
+
+    const batch = await SeedBatch.findById(req.params.id);
+    const enrichedPackets = packets.map((p, idx) => {
+      const pObj = p.toObject();
+      if (!pObj.crop && batch) {
+        pObj.crop = batch.crop || batch.seedType || '';
+      }
+      if (!pObj.locationCode && batch) {
+        const parsed = parseLocationString(batch.locationCode);
+        if (parsed) {
+          pObj.locationCode = `${parsed.land} - ${parsed.line} - ${idx + 1}`;
+        } else {
+          pObj.locationCode = batch.locationCode || '';
+        }
+      }
+      return pObj;
+    });
+
+    res.json({ success: true, packets: enrichedPackets });
   } catch (err) {
     sendServerError(res, err, 'batchRoutes');
   }
@@ -334,12 +541,27 @@ router.get('/:id', protect, async (req, res) => {
     const batch = await SeedBatch.findById(req.params.id).populate('createdBy', 'name');
     if (!batch) return res.status(404).json({ success: false, message: 'Batch not found' });
 
-    // Populate operator so Admin sees a real name instead of a raw ObjectId
-    // (Step 14) — read-only, no document is modified.
     const packets = await SeedPacket.find({ batchId: batch._id })
       .populate('operator', 'name')
       .sort({ uniqueId: 1 });
-    res.json({ success: true, batch, packets });
+
+    const enrichedPackets = packets.map((p, idx) => {
+      const pObj = p.toObject();
+      if (!pObj.crop && batch) {
+        pObj.crop = batch.crop || batch.seedType || '';
+      }
+      if (!pObj.locationCode && batch) {
+        const parsed = parseLocationString(batch.locationCode);
+        if (parsed) {
+          pObj.locationCode = `${parsed.land} - ${parsed.line} - ${idx + 1}`;
+        } else {
+          pObj.locationCode = batch.locationCode || '';
+        }
+      }
+      return pObj;
+    });
+
+    res.json({ success: true, batch, packets: enrichedPackets });
   } catch (err) {
     sendServerError(res, err, 'batchRoutes');
   }
