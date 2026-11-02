@@ -390,6 +390,45 @@ router.get('/', desktopRecordLimiter, async (req, res) => {
 // packets that have no desktop record yet. This is what lets a client tell
 // "existing packets have not been imported yet" apart from "the database is
 // empty", and check that it has downloaded every record. Read-only.
+// GET /api/desktop-records/yoy-sync — any Admin-collection account.
+// Fetches all QR packets formatted for synchronization with YOY.xlsx.
+router.get('/yoy-sync', desktopRecordLimiter, async (req, res) => {
+  try {
+    const packets = await SeedPacket.find({})
+      .populate('batchId')
+      .populate('operator', 'name')
+      .sort({ uniqueId: 1 })
+      .lean();
+
+    const rows = packets.map((p) => {
+      const batch = p.batchId || {};
+      const beforeUrl = p.beforePhotoUrl || (p.photoUrl && p.status === 'filled' ? p.photoUrl : '') || '';
+      const afterUrl = p.afterPhotoUrl || (p.photoUrl && p.status === 'filled' ? p.photoUrl : '') || '';
+      return {
+        packetId: p.uniqueId || '',
+        crop: p.crop || batch.crop || batch.seedType || '',
+        location: p.locationCode || batch.locationCode || '',
+        status: p.status || 'empty',
+        before: typeof p.beforeWeight === 'number' && Number.isFinite(p.beforeWeight) ? p.beforeWeight : null,
+        after: typeof p.afterWeight === 'number' && Number.isFinite(p.afterWeight) ? p.afterWeight : null,
+        beforePhoto: beforeUrl,
+        afterPhoto: afterUrl,
+        operator: (p.operator && p.operator.name) || '',
+        weighed: p.linkedAt ? new Date(p.linkedAt).toLocaleString() : '',
+        updatedAt: p.updatedAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      count: rows.length,
+      packets: rows,
+    });
+  } catch (err) {
+    sendServerError(res, err, 'desktopRecordRoutes:yoy-sync');
+  }
+});
+
 router.get('/summary', desktopRecordLimiter, async (req, res) => {
   try {
     const [records, linkedRecords, packets] = await Promise.all([

@@ -173,6 +173,7 @@ beforeEach(() => {
 const ROUTES = [
   { name: 'GET /',                method: 'get',  path: '/',               write: false, req: {} },
   { name: 'GET /summary',         method: 'get',  path: '/summary',        write: false, req: {} },
+  { name: 'GET /yoy-sync',        method: 'get',  path: '/yoy-sync',       write: false, req: {} },
   { name: 'POST /',               method: 'post', path: '/',               write: true,  req: { body: { recordId: UUID, fields: { crop: 'Maize' } } } },
   { name: 'PUT /:recordId',       method: 'put',  path: '/:recordId',      write: true,  req: { params: { recordId: UUID }, body: { baseVersion: 1, fields: { crop: 'Maize' } } } },
   { name: 'POST /import-packets', method: 'post', path: '/import-packets', write: true,  req: {} },
@@ -946,6 +947,48 @@ describe('desktop records — GET /summary (counts only)', () => {
     const res = await get('admin');
     assert.equal(res.statusCode, 500);
     assert.ok(!JSON.stringify(res.body).includes('E-SECRET-DRIVER-DETAIL'));
+  });
+});
+
+describe('desktop records — GET /yoy-sync', () => {
+  it('returns packets formatted for YOY.xlsx', async () => {
+    Admin.findById = async () => ({ _id: 'admin-1', role: 'admin', isActive: true });
+    world.packets = [
+      {
+        _id: 'p1',
+        uniqueId: 'PKT-001',
+        crop: 'Wheat',
+        locationCode: 'R-1-1',
+        status: 'filled',
+        beforeWeight: 10.5,
+        afterWeight: 12.0,
+        beforePhotoUrl: 'http://example.com/b.jpg',
+        afterPhotoUrl: 'http://example.com/a.jpg',
+        operator: { name: 'John Doe' },
+        linkedAt: new Date('2026-01-01T10:00:00Z'),
+        batchId: { crop: 'Wheat', locationCode: 'R-1-1' },
+      },
+    ];
+    const res = await call('get', '/yoy-sync', { headers: authHeaderFor('admin-1') });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.count, 1);
+    assert.equal(res.body.packets[0].packetId, 'PKT-001');
+    assert.equal(res.body.packets[0].crop, 'Wheat');
+    assert.equal(res.body.packets[0].status, 'filled');
+    assert.equal(res.body.packets[0].before, 10.5);
+    assert.equal(res.body.packets[0].after, 12.0);
+    assert.equal(res.body.packets[0].operator, 'John Doe');
+  });
+
+  it('handles empty packets collection', async () => {
+    Admin.findById = async () => ({ _id: 'admin-1', role: 'admin', isActive: true });
+    world.packets = [];
+    const res = await call('get', '/yoy-sync', { headers: authHeaderFor('admin-1') });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.count, 0);
+    assert.deepEqual(res.body.packets, []);
   });
 });
 
