@@ -32,6 +32,18 @@ export function getSeedCodeForCrop(cropName) {
 }
 
 export function parseLocation(loc) {
+  if (loc && typeof loc === 'object') {
+    const land = String(loc.land || '').trim();
+    const line = String(loc.line || '').trim();
+    const count = parseInt(String(loc.srNo || loc.count || ''), 10);
+    if (land && line && !isNaN(count) && count > 0) {
+      return { land, line, count, valid: true };
+    }
+    if (typeof loc.location === 'string') {
+      return parseLocation(loc.location);
+    }
+    return null;
+  }
   if (!loc || typeof loc !== 'string') return null;
   const parts = loc.split(/\s*-\s*/).map(s => s.trim()).filter(Boolean);
   if (parts.length === 3) {
@@ -50,6 +62,9 @@ const createInitialEntry = (id = 1) => ({
   cropName: '',
   seedCode: '',
   seedCategory: '',
+  land: '',
+  line: '',
+  srNo: '',
   location: '',
   year: '',
   previousYear: '',
@@ -82,6 +97,13 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
 
       if (name === 'cropName') {
         cur.seedCode = getSeedCodeForCrop(value);
+      }
+
+      if (name === 'land' || name === 'line' || name === 'srNo') {
+        const l = (name === 'land' ? value : cur.land || '').trim();
+        const ln = (name === 'line' ? value : cur.line || '').trim();
+        const sr = (name === 'srNo' ? value : cur.srNo || '').trim();
+        cur.location = (l && ln && sr) ? `${l}-${ln}-${sr}` : (l || ln || sr ? `${l}-${ln}-${sr}` : '');
       }
 
       copy[index] = cur;
@@ -121,17 +143,25 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
         setCreateError(`${prefix}Please enter Seed Code`);
         return;
       }
-      if (!entry.location?.trim()) {
-        setCreateError(`${prefix}Please enter Location (e.g. R - 2 - 24)`);
+      if (!entry.land?.trim()) {
+        setCreateError(`${prefix}Please enter Land (e.g. R)`);
         return;
       }
-      const parsed = parseLocation(entry.location);
+      if (!entry.line?.trim()) {
+        setCreateError(`${prefix}Please enter Line (e.g. 2)`);
+        return;
+      }
+      if (!entry.srNo || !String(entry.srNo).trim()) {
+        setCreateError(`${prefix}Please enter Sr. No. (total QR count, e.g. 3)`);
+        return;
+      }
+      const parsed = parseLocation(entry);
       if (!parsed) {
-        setCreateError(`${prefix}Location must follow format: Land - Line - Count (e.g. R - 2 - 24)`);
+        setCreateError(`${prefix}Location must follow format: Land - Line - Sr. No. (e.g. R-2-3)`);
         return;
       }
       if (parsed.count < 1 || parsed.count > 5000) {
-        setCreateError(`${prefix}QR count in Location must be between 1 and 5000`);
+        setCreateError(`${prefix}Sr. No. (QR count) must be between 1 and 5000`);
         return;
       }
       if (entry.year && String(entry.year).trim()) {
@@ -154,10 +184,11 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
       setCreating(true);
 
       const formattedEntries = entries.map(entry => {
-        const parsed = parseLocation(entry.location);
+        const parsed = parseLocation(entry);
         const land = parsed.land;
         const line = parsed.line;
         const count = parsed.count;
+        const finalLocation = `${land}-${line}-${count}`;
         const batchNum = `${land}-${line}`;
         const batchCd = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'B1';
         const sc = entry.seedCode.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'SC';
@@ -171,10 +202,11 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
           batchNumber: batchNum,
           batchCode: batchCd,
           count: count,
+          srNo: count,
           land: land,
           line: line,
-          location: entry.location.trim(),
-          locationCode: entry.location.trim(),
+          location: finalLocation,
+          locationCode: finalLocation,
           year: entry.year && String(entry.year).trim() ? Number(entry.year) : null,
           previousYear: entry.previousYear && String(entry.previousYear).trim() ? Number(entry.previousYear) : null,
           previousLocation: entry.previousLocation?.trim() || '',
@@ -203,7 +235,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
 
   // Calculate total QR codes across all entries
   const totalCount = entries.reduce((sum, e) => {
-    const p = parseLocation(e.location);
+    const p = parseLocation(e);
     return sum + (p ? p.count : 0);
   }, 0);
 
@@ -220,7 +252,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
       </DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
         {entries.map((entry, index) => {
-          const parsed = parseLocation(entry.location);
+          const parsed = parseLocation(entry);
           const sc = entry.seedCode ? entry.seedCode.toUpperCase().replace(/[^A-Z0-9]/g, '') : '';
           const bc = parsed ? `${parsed.land}${parsed.line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
           const previewPrd = sc && bc && parsed
@@ -341,18 +373,66 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
                   </TextField>
                 </Grid>
 
-                {/* 2. Location */}
+                {/* 2. Location (Three separate fields: Land, Line, Sr. No.) */}
                 <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Location"
-                    name="location"
-                    value={entry.location}
-                    onChange={(e) => handleEntryChange(index, 'location', e.target.value)}
-                    size="small"
-                    placeholder="e.g. R - 2 - 24"
-                    helperText="Format: Land - Line - Count (e.g. R - 2 - 24)"
-                  />
+                  <Box sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    border: '1px solid #e2e8f0',
+                    background: '#f8fafc',
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Location
+                      </Typography>
+                      {entry.land && entry.line && entry.srNo && (
+                        <Typography sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#1a227f' }}>
+                          Final: {entry.land.trim()}-{entry.line.trim()}-{entry.srNo.trim()}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Land"
+                        name="land"
+                        value={entry.land || ''}
+                        onChange={(e) => handleEntryChange(index, 'land', e.target.value)}
+                        placeholder="R"
+                        sx={{ background: '#ffffff' }}
+                        inputProps={{ style: { textTransform: 'uppercase', fontWeight: 700 } }}
+                      />
+                      <Typography sx={{ fontWeight: 800, fontSize: 18, color: '#94a3b8', userSelect: 'none' }}>–</Typography>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Line"
+                        name="line"
+                        value={entry.line || ''}
+                        onChange={(e) => handleEntryChange(index, 'line', e.target.value)}
+                        placeholder="2"
+                        sx={{ background: '#ffffff' }}
+                        inputProps={{ style: { fontWeight: 700 } }}
+                      />
+                      <Typography sx={{ fontWeight: 800, fontSize: 18, color: '#94a3b8', userSelect: 'none' }}>–</Typography>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Sr. No."
+                        name="srNo"
+                        type="number"
+                        value={entry.srNo || ''}
+                        onChange={(e) => handleEntryChange(index, 'srNo', e.target.value)}
+                        placeholder="3"
+                        inputProps={{ min: 1, max: 5000, style: { fontWeight: 700 } }}
+                        sx={{ background: '#ffffff' }}
+                      />
+                    </Box>
+                    <Typography sx={{ fontSize: 11, color: '#64748b', mt: 0.8 }}>
+                      Sr. No. determines total QRs (e.g. {entry.land?.trim() || 'R'}-{entry.line?.trim() || '2'}-1 to {entry.land?.trim() || 'R'}-{entry.line?.trim() || '2'}-{entry.srNo?.trim() || '3'})
+                    </Typography>
+                  </Box>
                 </Grid>
 
                 {/* 3. Year & PreviousYear */}

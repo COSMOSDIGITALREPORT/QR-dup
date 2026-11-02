@@ -315,4 +315,35 @@ describe('batch seed details — multi-seed batch creation', () => {
     assert.equal(res.body.packets[1].uniqueId, 'PRD-SFR2-005');
     assert.equal(res.body.packets[1].locationCode, 'R - 2 - 5');
   });
+
+  it('generates exactly Sr. No. QR codes (R-2-1, R-2-2, R-2-3) when given Land: R, Line: 2, Sr. No.: 3', async () => {
+    SeedPacket.find = () => ({
+      select: () => ({
+        lean: async () => [],
+      }),
+    });
+
+    const entries = [
+      {
+        cropName: 'Sunflower',
+        seedCode: 'SF',
+        land: 'R',
+        line: '2',
+        srNo: 3,
+        location: 'R-2-3',
+      },
+    ];
+
+    const res = await post({ entries });
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.batch.count, 3);
+    assert.equal(res.body.packets.length, 3);
+    assert.equal(res.body.packets[0].uniqueId, 'PRD-SFR2-001');
+    assert.equal(res.body.packets[0].locationCode, 'R - 2 - 1');
+    assert.equal(res.body.packets[1].uniqueId, 'PRD-SFR2-002');
+    assert.equal(res.body.packets[1].locationCode, 'R - 2 - 2');
+    assert.equal(res.body.packets[2].uniqueId, 'PRD-SFR2-003');
+    assert.equal(res.body.packets[2].locationCode, 'R - 2 - 3');
+  });
 });

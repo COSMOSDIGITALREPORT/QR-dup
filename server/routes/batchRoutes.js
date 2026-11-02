@@ -371,9 +371,13 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
           return res.status(400).json({ success: false, message: `${prefix}seedCode required` });
         }
         const loc = (e.location || e.locationCode || '').trim();
-        const parsed = parseLocationString(loc);
-        if (!parsed) {
-          return res.status(400).json({ success: false, message: `${prefix}location must follow Land - Line - Count (e.g. R - 2 - 24)` });
+        const parsed = parseLocationString(loc) || (
+          e.land && e.line && (e.srNo != null || e.count != null)
+            ? { land: String(e.land).trim(), line: String(e.line).trim(), count: parseInt(e.srNo ?? e.count, 10) }
+            : null
+        );
+        if (!parsed || !parsed.land || !parsed.line || isNaN(parsed.count)) {
+          return res.status(400).json({ success: false, message: `${prefix}location must follow Land - Line - Count (e.g. R-2-3)` });
         }
         if (parsed.count < 1 || parsed.count > 5000) {
           return res.status(400).json({ success: false, message: `${prefix}count must be 1–5000` });
@@ -393,7 +397,7 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
           land: parsed.land,
           line: parsed.line,
           count: parsed.count,
-          location: loc,
+          location: loc || `${parsed.land}-${parsed.line}-${parsed.count}`,
           year: e.year ? Number(e.year) : null,
           previousYear: e.previousYear ? Number(e.previousYear) : null,
           previousLocationCode: e.previousLocation || e.previousLocationCode || '',
