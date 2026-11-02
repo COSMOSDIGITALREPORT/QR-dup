@@ -966,7 +966,15 @@ describe('desktop records — GET /yoy-sync', () => {
         afterPhotoUrl: 'http://example.com/a.jpg',
         operator: { name: 'John Doe' },
         linkedAt: new Date('2026-01-01T10:00:00Z'),
-        batchId: { crop: 'Wheat', locationCode: 'R-1-1' },
+        batchId: {
+          crop: 'Wheat',
+          locationCode: 'R-1-1',
+          year: 2026,
+          previousYear: 2025,
+          previousLocationCode: 'PL-Old',
+          gene: 'G1',
+          comments: 'Batch remarks',
+        },
       },
     ];
     const res = await call('get', '/yoy-sync', { headers: authHeaderFor('admin-1') });
@@ -975,6 +983,11 @@ describe('desktop records — GET /yoy-sync', () => {
     assert.equal(res.body.count, 1);
     assert.equal(res.body.packets[0].packetId, 'PKT-001');
     assert.equal(res.body.packets[0].crop, 'Wheat');
+    assert.equal(res.body.packets[0].year, 2026);
+    assert.equal(res.body.packets[0].previousYear, 2025);
+    assert.equal(res.body.packets[0].previousLocation, 'PL-Old');
+    assert.equal(res.body.packets[0].gean, 'G1');
+    assert.equal(res.body.packets[0].comments, 'Batch remarks');
     assert.equal(res.body.packets[0].status, 'filled');
     assert.equal(res.body.packets[0].before, 10.5);
     assert.equal(res.body.packets[0].after, 12.0);

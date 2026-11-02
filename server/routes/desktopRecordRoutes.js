@@ -402,12 +402,31 @@ router.get('/yoy-sync', desktopRecordLimiter, async (req, res) => {
 
     const rows = packets.map((p) => {
       const batch = p.batchId || {};
+      let seedEntry = null;
+      if (Array.isArray(batch.seeds) && batch.seeds.length > 0) {
+        seedEntry = batch.seeds.find(s =>
+          (p.crop && (s.crop === p.crop || s.seedType === p.crop)) ||
+          (p.seedCode && s.seedCode === p.seedCode)
+        ) || batch.seeds[0];
+      }
+
+      const year = seedEntry?.year ?? batch.year ?? '';
+      const previousYear = seedEntry?.previousYear ?? batch.previousYear ?? '';
+      const previousLocation = seedEntry?.previousLocationCode || batch.previousLocationCode || '';
+      const gean = seedEntry?.gene || batch.gene || '';
+      const comments = seedEntry?.comments || batch.comments || '';
+
       const beforeUrl = p.beforePhotoUrl || (p.photoUrl && p.status === 'filled' ? p.photoUrl : '') || '';
       const afterUrl = p.afterPhotoUrl || (p.photoUrl && p.status === 'filled' ? p.photoUrl : '') || '';
       return {
         packetId: p.uniqueId || '',
         crop: p.crop || batch.crop || batch.seedType || '',
         location: p.locationCode || batch.locationCode || '',
+        year: year !== null && year !== undefined ? year : '',
+        previousYear: previousYear !== null && previousYear !== undefined ? previousYear : '',
+        previousLocation: previousLocation,
+        gean: gean,
+        comments: comments,
         status: p.status || 'empty',
         before: typeof p.beforeWeight === 'number' && Number.isFinite(p.beforeWeight) ? p.beforeWeight : null,
         after: typeof p.afterWeight === 'number' && Number.isFinite(p.afterWeight) ? p.afterWeight : null,
