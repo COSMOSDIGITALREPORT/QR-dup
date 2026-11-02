@@ -20,168 +20,245 @@ const YOY_HEADERS = [
   'Weighed',
 ];
 
-const COLUMN_WIDTHS = [15, 13, 15, 12, 14, 18, 12, 20, 17, 23, 13, 15, 18, 13, 13];
+const COLUMN_WIDTHS = [
+  18, // 1: Packet ID
+  15, // 2: Crop
+  16, // 3: Location
+  12, // 4: Year
+  16, // 5: Previous Year
+  20, // 6: Previous Location
+  12, // 7: Gean
+  24, // 8: Comments
+  14, // 9: Status
+  14, // 10: Before
+  14, // 11: After
+  32, // 12: Before Photo
+  32, // 13: After Photo
+  16, // 14: Operator
+  24, // 15: Weighed
+];
 
 const BUSY_CODES = new Set(['EBUSY', 'EPERM', 'EACCES']);
+
+const THIN_BORDER = {
+  top:    { style: 'thin', color: { argb: 'FFCBD5E1' } },
+  left:   { style: 'thin', color: { argb: 'FFCBD5E1' } },
+  bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+  right:  { style: 'thin', color: { argb: 'FFCBD5E1' } },
+};
+
+function formatPacketValues(p) {
+  const packetId = String(p.packetId || p.uniqueId || '').trim();
+  const crop = String(p.crop || '').trim();
+  const location = String(p.location || p.locationCode || '').trim();
+
+  let year = '';
+  if (p.year !== null && p.year !== undefined && p.year !== '') {
+    const n = Number(p.year);
+    year = Number.isFinite(n) ? n : String(p.year).trim();
+  }
+
+  let previousYear = '';
+  if (p.previousYear !== null && p.previousYear !== undefined && p.previousYear !== '') {
+    const n = Number(p.previousYear);
+    previousYear = Number.isFinite(n) ? n : String(p.previousYear).trim();
+  }
+
+  const previousLocation = String(p.previousLocation || p.previousLocationCode || '').trim();
+  const gean = String(p.gean !== null && p.gean !== undefined ? p.gean : (p.gene || '')).trim();
+  const comments = String(p.comments || '').trim();
+  const status = String(p.status || 'empty').trim();
+
+  let before = null;
+  const rawBefore = typeof p.before === 'number' ? p.before : p.beforeWeight;
+  if (typeof rawBefore === 'number' && Number.isFinite(rawBefore)) {
+    before = rawBefore;
+  }
+
+  let after = null;
+  const rawAfter = typeof p.after === 'number' ? p.after : p.afterWeight;
+  if (typeof rawAfter === 'number' && Number.isFinite(rawAfter)) {
+    after = rawAfter;
+  }
+
+  const beforePhoto = String(p.beforePhoto || p.beforePhotoUrl || '').trim();
+  const afterPhoto = String(p.afterPhoto || p.afterPhotoUrl || '').trim();
+  const operator = String(p.operator ? (typeof p.operator === 'object' ? p.operator.name || '' : p.operator) : '').trim();
+  const weighed = String(p.weighed || (p.linkedAt ? new Date(p.linkedAt).toLocaleString() : '')).trim();
+
+  return [
+    packetId,
+    crop,
+    location,
+    year,
+    previousYear,
+    previousLocation,
+    gean,
+    comments,
+    status,
+    before !== null ? before : '',
+    after !== null ? after : '',
+    beforePhoto,
+    afterPhoto,
+    operator,
+    weighed,
+  ];
+}
+
+function applyCellStyles(row, isHeader = false) {
+  for (let col = 1; col <= YOY_HEADERS.length; col++) {
+    const cell = row.getCell(col);
+    cell.border = THIN_BORDER;
+
+    if (isHeader) {
+      cell.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: 'FF0F172A' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false };
+    } else {
+      cell.font = { name: 'Times New Roman', size: 12, bold: false };
+
+      // Specific column alignments & number formats
+      if (col === 1 || col === 3 || col === 4 || col === 5 || col === 6 || col === 7 || col === 9 || col === 15) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (col === 10 || col === 11) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        if (typeof cell.value === 'number') {
+          cell.numFmt = '0.00';
+        }
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      }
+    }
+  }
+}
 
 function createYoyWorkbookWriter({ filePath, dir }) {
   const targetPath = filePath || (dir ? path.join(dir, 'YOY.xlsx') : (fs.existsSync('D:\\dapatri argo\\YOY.xlsx') ? 'D:\\dapatri argo\\YOY.xlsx' : path.join(process.cwd(), 'YOY.xlsx')));
   const backupPath = targetPath.replace(/\.xlsx$/i, '.backup.xlsx');
 
   async function write(packets = []) {
-    let book = new ExcelJS.Workbook();
-    let sheet;
+    let existingPacketsMap = new Map();
 
-    const fileExists = fs.existsSync(targetPath);
-    if (fileExists) {
+    // 1. Read existing workbook if present to preserve any extra offline rows
+    if (fs.existsSync(targetPath)) {
       try {
-        await book.xlsx.readFile(targetPath);
-        sheet = book.getWorksheet('Sheet1') || book.worksheets[0];
+        const existingBook = new ExcelJS.Workbook();
+        await existingBook.xlsx.readFile(targetPath);
+        const existingSheet = existingBook.getWorksheet('Sheet1') || existingBook.worksheets[0];
+        if (existingSheet && existingSheet.rowCount > 1) {
+          const header4 = String(existingSheet.getRow(1).getCell(4).value || '').trim().toLowerCase();
+          const isLegacy10 = header4 === 'status';
+
+          existingSheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return;
+            const pktId = String(row.getCell(1).value || '').trim();
+            if (!pktId) return;
+
+            if (isLegacy10) {
+              // Legacy 10-column layout
+              existingPacketsMap.set(pktId, {
+                packetId: pktId,
+                crop: row.getCell(2).value,
+                location: row.getCell(3).value,
+                year: '',
+                previousYear: '',
+                previousLocation: '',
+                gean: '',
+                comments: '',
+                status: row.getCell(4).value,
+                before: row.getCell(5).value,
+                after: row.getCell(6).value,
+                beforePhoto: row.getCell(7).value,
+                afterPhoto: row.getCell(8).value,
+                operator: row.getCell(9).value,
+                weighed: row.getCell(10).value,
+              });
+            } else {
+              // 15-column layout
+              existingPacketsMap.set(pktId, {
+                packetId: pktId,
+                crop: row.getCell(2).value,
+                location: row.getCell(3).value,
+                year: row.getCell(4).value,
+                previousYear: row.getCell(5).value,
+                previousLocation: row.getCell(6).value,
+                gean: row.getCell(7).value,
+                comments: row.getCell(8).value,
+                status: row.getCell(9).value,
+                before: row.getCell(10).value,
+                after: row.getCell(11).value,
+                beforePhoto: row.getCell(12).value,
+                afterPhoto: row.getCell(13).value,
+                operator: row.getCell(14).value,
+                weighed: row.getCell(15).value,
+              });
+            }
+          });
+        }
       } catch (readErr) {
         if (BUSY_CODES.has(readErr.code)) {
           const busy = new Error('YOY.xlsx is open in another program. Please close Excel and click Sync Now.');
           busy.busy = true;
           throw busy;
         }
-        // If file is unreadable/corrupt, create fresh
-        book = new ExcelJS.Workbook();
-        sheet = null;
+        // If file is unreadable, proceed with fresh workbook
       }
     }
 
-    if (!sheet) {
-      sheet = book.addWorksheet('Sheet1');
-      sheet.columns = YOY_HEADERS.map((header, idx) => ({
-        header,
-        key: header,
-        width: COLUMN_WIDTHS[idx] || 15,
-      }));
-      const headerRow = sheet.getRow(1);
-      for (let c = 1; c <= YOY_HEADERS.length; c++) {
-        const cell = headerRow.getCell(c);
-        cell.font = { name: 'Times New Roman', size: 12, bold: false };
-      }
-      headerRow.commit();
-    } else {
-      // Check if existing sheet has legacy 10-column layout (col 4 was 'Status')
-      const currentHeader4 = String(sheet.getRow(1).getCell(4).value || '').trim().toLowerCase();
-      const isLegacy10Cols = currentHeader4 === 'status';
-
-      if (isLegacy10Cols) {
-        // Shift old data columns (4..10) to new positions (9..15) and keep 4..8 blank
-        sheet.eachRow((row, rowNumber) => {
-          if (rowNumber === 1) return;
-          const status = row.getCell(4).value;
-          const before = row.getCell(5).value;
-          const after = row.getCell(6).value;
-          const beforePhoto = row.getCell(7).value;
-          const afterPhoto = row.getCell(8).value;
-          const operator = row.getCell(9).value;
-          const weighed = row.getCell(10).value;
-
-          row.getCell(4).value = '';
-          row.getCell(5).value = '';
-          row.getCell(6).value = '';
-          row.getCell(7).value = '';
-          row.getCell(8).value = '';
-
-          row.getCell(9).value = status;
-          row.getCell(10).value = before;
-          row.getCell(11).value = after;
-          row.getCell(12).value = beforePhoto;
-          row.getCell(13).value = afterPhoto;
-          row.getCell(14).value = operator;
-          row.getCell(15).value = weighed;
-
-          for (let c = 1; c <= YOY_HEADERS.length; c++) {
-            row.getCell(c).font = { name: 'Times New Roman', size: 12, bold: false };
-          }
-          row.commit();
-        });
-      }
-
-      // Update row 1 headers to 15 columns with Times New Roman 12pt
-      sheet.columns = YOY_HEADERS.map((header, idx) => ({
-        header,
-        key: header,
-        width: COLUMN_WIDTHS[idx] || 15,
-      }));
-      const headerRow = sheet.getRow(1);
-      for (let c = 1; c <= YOY_HEADERS.length; c++) {
-        const cell = headerRow.getCell(c);
-        cell.value = YOY_HEADERS[c - 1];
-        cell.font = { name: 'Times New Roman', size: 12, bold: false };
-      }
-      headerRow.commit();
-    }
-
-    // Index existing rows by Packet ID (Column 1)
-    const rowMap = new Map();
-    sheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return;
-      const packetId = String(row.getCell(1).value || '').trim();
-      if (packetId) rowMap.set(packetId, rowNumber);
-    });
-
-    let updated = 0;
+    // 2. Overlay / Merge verified incoming packets from MongoDB
     let inserted = 0;
+    let updated = 0;
 
     for (const p of packets) {
-      const packetId = String(p.packetId || p.uniqueId || '').trim();
-      if (!packetId) continue;
-
-      const crop = p.crop || '';
-      const location = p.location || p.locationCode || '';
-      const year = (p.year !== null && p.year !== undefined && p.year !== '') ? p.year : '';
-      const previousYear = (p.previousYear !== null && p.previousYear !== undefined && p.previousYear !== '') ? p.previousYear : '';
-      const previousLocation = p.previousLocation || p.previousLocationCode || '';
-      const gean = p.gean || p.gene || '';
-      const comments = p.comments || '';
-      const status = p.status || 'empty';
-      const before = typeof p.before === 'number' ? p.before : (typeof p.beforeWeight === 'number' ? p.beforeWeight : '');
-      const after = typeof p.after === 'number' ? p.after : (typeof p.afterWeight === 'number' ? p.afterWeight : '');
-      const beforePhoto = p.beforePhoto || p.beforePhotoUrl || '';
-      const afterPhoto = p.afterPhoto || p.afterPhotoUrl || '';
-      const operator = p.operator ? (typeof p.operator === 'object' ? p.operator.name || '' : String(p.operator)) : '';
-      const weighed = p.weighed ? String(p.weighed) : (p.linkedAt ? new Date(p.linkedAt).toLocaleString() : '');
-
-      const values = [
-        packetId,
-        crop,
-        location,
-        year,
-        previousYear,
-        previousLocation,
-        gean,
-        comments,
-        status,
-        before,
-        after,
-        beforePhoto,
-        afterPhoto,
-        operator,
-        weighed,
-      ];
-
-      if (rowMap.has(packetId)) {
-        const rowNumber = rowMap.get(packetId);
-        const row = sheet.getRow(rowNumber);
-        for (let col = 1; col <= YOY_HEADERS.length; col++) {
-          row.getCell(col).value = values[col - 1];
-        }
-        row.commit();
+      const pid = String(p.packetId || p.uniqueId || '').trim();
+      if (!pid) continue;
+      if (existingPacketsMap.has(pid)) {
         updated++;
       } else {
-        const newRow = sheet.addRow(values);
-        for (let col = 1; col <= YOY_HEADERS.length; col++) {
-          const cell = newRow.getCell(col);
-          cell.font = { name: 'Times New Roman', size: 12, bold: false };
-        }
-        newRow.commit();
         inserted++;
       }
+      existingPacketsMap.set(pid, p);
     }
 
+    // 3. Rebuild fresh workbook cleanly with frozen headers and correct columns
+    const book = new ExcelJS.Workbook();
+    book.creator = 'Seed Management Desktop';
+    const sheet = book.addWorksheet('Sheet1', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+
+    sheet.columns = YOY_HEADERS.map((header, idx) => ({
+      header,
+      key: header,
+      width: COLUMN_WIDTHS[idx] || 16,
+    }));
+
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 26;
+    for (let c = 1; c <= YOY_HEADERS.length; c++) {
+      headerRow.getCell(c).value = YOY_HEADERS[c - 1];
+    }
+    applyCellStyles(headerRow, true);
+    headerRow.commit();
+
+    // 4. Add data rows (preserve existing order, new records appended)
+    const allRecords = Array.from(existingPacketsMap.values());
+
+    for (const record of allRecords) {
+      const rowValues = formatPacketValues(record);
+      const newRow = sheet.addRow(rowValues);
+      newRow.height = 22;
+      applyCellStyles(newRow, false);
+      newRow.commit();
+    }
+
+    // 5. Add AutoFilter across row 1
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to:   { row: 1, column: YOY_HEADERS.length },
+    };
+
+    // 6. Safe atomic write: write to .tmp, then backup, then rename
     const tmpPath = `${targetPath}.tmp`;
     const targetDir = path.dirname(targetPath);
     fs.mkdirSync(targetDir, { recursive: true });
@@ -215,7 +292,7 @@ function createYoyWorkbookWriter({ filePath, dir }) {
     return {
       written: true,
       filePath: targetPath,
-      rows: sheet.rowCount - 1, // data rows
+      rows: allRecords.length,
       inserted,
       updated,
     };
@@ -231,5 +308,6 @@ function createYoyWorkbookWriter({ filePath, dir }) {
 module.exports = {
   createYoyWorkbookWriter,
   YOY_HEADERS,
+  COLUMN_WIDTHS,
+  formatPacketValues,
 };
-

@@ -7,6 +7,7 @@ const { createRecordStore } = require('./recordStore');
 const { createOutbox } = require('./outbox');
 const { createSyncEngine } = require('./syncEngine');
 const { createWorkbookWriter } = require('./workbookWriter');
+const { createYoyWorkbookWriter } = require('./yoyWorkbookWriter');
 const { COLUMNS, HIDDEN_COLUMNS, PACKET_DERIVED_FIELDS, normalizeFields, isEmptyRecord, blankFields } = require('../shared/columns');
 
 // The whole application minus the window: everything the two screens do
@@ -25,8 +26,52 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
   const outbox = createOutbox({ filePath: path.join(stateDir, 'outbox.json') });
   const workbook = createWorkbookWriter({ dir: workbookDir });
 
+  const defaultYoy = fs.existsSync('D:\\dapatri argo\\YOY.xlsx')
+    ? 'D:\\dapatri argo\\YOY.xlsx'
+    : (workbookDir ? path.join(workbookDir, 'YOY.xlsx') : path.join(process.cwd(), 'YOY.xlsx'));
+  const yoyWorkbook = createYoyWorkbookWriter({ filePath: defaultYoy });
+
+  const yoyState = {
+    filePath: yoyWorkbook.filePath,
+    lastSyncAt: null,
+    lastError: null,
+    syncing: false,
+    rowCount: 0,
+    inserted: 0,
+    updated: 0,
+  };
+
+  function getYoyStatus() {
+    return { ...yoyState };
+  }
+
+  async function syncYoyWorkbook() {
+    if (yoyState.syncing) return getYoyStatus();
+    yoyState.syncing = true;
+    yoyState.lastError = null;
+    emitData();
+
+    try {
+      const res = await api.get('/api/desktop-records/yoy-sync');
+      if (res && res.data && Array.isArray(res.data.packets)) {
+        const result = await yoyWorkbook.write(res.data.packets);
+        yoyState.lastSyncAt = new Date().toISOString();
+        yoyState.rowCount = result.rows;
+        yoyState.inserted = result.inserted;
+        yoyState.updated = result.updated;
+        yoyState.lastError = null;
+      }
+    } catch (err) {
+      yoyState.lastError = err && err.message ? err.message : 'YOY workbook sync failed';
+    } finally {
+      yoyState.syncing = false;
+      emitData();
+    }
+    return getYoyStatus();
+  }
+
   let engine;
-  const emitData = () => onEvent('data', { rows: getRows(), status: engine.getStatus() });
+  const emitData = () => onEvent('data', { rows: getRows(), status: { ...engine.getStatus(), yoy: getYoyStatus() } });
 
   auth = createAuthService({
     api,
@@ -83,15 +128,21 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
   return {
     apiUrl,
     workbookPath: workbook.filePath,
+    yoyWorkbookPath: yoyWorkbook.filePath,
     getColumns: () => ({ columns: COLUMNS, hidden: HIDDEN_COLUMNS, packetDerived: PACKET_DERIVED_FIELDS }),
     getSession: () => auth.getSession(),
     getRows,
-    getStatus: () => engine.getStatus(),
+    getStatus: () => ({ ...engine.getStatus(), yoy: getYoyStatus() }),
+    getYoyStatus,
+    yoySyncNow: () => syncYoyWorkbook(),
     friendly,
 
     async restore() {
       const session = await auth.restore();
-      if (session) engine.start({ full: true });
+      if (session) {
+        engine.start({ full: true });
+        syncYoyWorkbook().catch(() => {});
+      }
       return session;
     },
 
@@ -99,6 +150,7 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
       const session = await auth.login(email, password);
       // Not awaited: the screen opens at once and fills as records arrive.
       engine.start({ full: true });
+      syncYoyWorkbook().catch(() => {});
       return session;
     },
 
@@ -165,7 +217,11 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
       return done;
     },
 
-    syncNow: (options) => engine.syncNow(options),
+    async syncNow(options) {
+      const res = await engine.syncNow(options);
+      syncYoyWorkbook().catch(() => {});
+      return res;
+    },
 
     dispose() {
       engine.stop();

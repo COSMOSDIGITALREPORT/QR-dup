@@ -40,7 +40,7 @@ function send(event, payload) {
 // cannot be invoked from the UI.
 function buildMethods() {
   return {
-    'app.info': () => ({ ...core.getColumns(), version: app.getVersion(), apiUrl: core.apiUrl, workbookPath: core.workbookPath }),
+    'app.info': () => ({ ...core.getColumns(), version: app.getVersion(), apiUrl: core.apiUrl, workbookPath: core.workbookPath, yoyWorkbookPath: core.yoyWorkbookPath, yoyStatus: core.getYoyStatus() }),
 
     'auth.restore': () => core.restore(),
     'auth.login': (email, password) => core.login(email, password),
@@ -57,6 +57,11 @@ function buildMethods() {
 
     'sync.now': () => core.syncNow(),
 
+    'workbook.open': async () => {
+      if (!fs.existsSync(core.workbookPath)) throw new Error('The workbook has not been written yet.');
+      await shell.openPath(core.workbookPath);
+      return true;
+    },
     'workbook.showInFolder': () => {
       if (!fs.existsSync(core.workbookPath)) throw new Error('The workbook has not been written yet.');
       shell.showItemInFolder(core.workbookPath);
@@ -76,6 +81,35 @@ function buildMethods() {
         throw new Error('Choose a different name — that is the live workbook.');
       }
       fs.copyFileSync(core.workbookPath, filePath);
+      return filePath;
+    },
+
+    'yoy.sync': () => core.yoySyncNow(),
+    'yoy.open': async () => {
+      if (!fs.existsSync(core.yoyWorkbookPath)) {
+        await core.yoySyncNow();
+      }
+      if (!fs.existsSync(core.yoyWorkbookPath)) throw new Error('YOY.xlsx has not been created yet.');
+      await shell.openPath(core.yoyWorkbookPath);
+      return true;
+    },
+    'yoy.showInFolder': () => {
+      if (!fs.existsSync(core.yoyWorkbookPath)) throw new Error('YOY.xlsx has not been created yet.');
+      shell.showItemInFolder(core.yoyWorkbookPath);
+      return true;
+    },
+    'yoy.saveCopy': async () => {
+      if (!fs.existsSync(core.yoyWorkbookPath)) throw new Error('YOY.xlsx has not been created yet.');
+      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: 'Save a copy of YOY.xlsx',
+        defaultPath: path.join(app.getPath('documents'), 'YOY - copy.xlsx'),
+        filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }],
+      });
+      if (canceled || !filePath) return null;
+      if (path.resolve(filePath).toLowerCase() === path.resolve(core.yoyWorkbookPath).toLowerCase()) {
+        throw new Error('Choose a different name — that is the live workbook.');
+      }
+      fs.copyFileSync(core.yoyWorkbookPath, filePath);
       return filePath;
     },
   };

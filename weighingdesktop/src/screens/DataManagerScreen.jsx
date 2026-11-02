@@ -4,6 +4,7 @@ import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
@@ -17,10 +18,7 @@ const desktop = window.desktop;
 
 const ROLE_LABEL = { superadmin: 'Superadmin', admin: 'Admin', operator: 'Operator (admin)' };
 
-// Screen 2 of 2: the Excel-style table. Everything else the app does
-// (adding a record, resolving a conflict) is a dialog on top of this screen,
-// never a separate one. Existing seed packets need no action here: the
-// backend makes them available by itself whenever records are listed.
+// Screen 2 of 2: the Excel-style table and Excel Workbook Synchronization.
 export default function DataManagerScreen({ session, info }) {
   const { columns, packetDerived } = info;
   const canManage = session.canManage;
@@ -84,6 +82,31 @@ export default function DataManagerScreen({ session, info }) {
   const issueRow = issueRecordId ? rows.find((r) => r.recordId === issueRecordId && (r.syncState === 'conflict' || r.syncState === 'error')) : null;
   const closeIssue = () => setIssueRecordId(null);
 
+  // YOY Workbook Synchronization state
+  const yoy = status?.yoy || info.yoyStatus || {};
+  const yoyFilePath = yoy.filePath || info.yoyWorkbookPath || 'D:\\dapatri argo\\YOY.xlsx';
+  const yoySyncing = Boolean(yoy.syncing);
+  const yoyLastError = yoy.lastError;
+  const yoyLastSync = yoy.lastSyncAt;
+  const yoyRowCount = yoy.rowCount || 0;
+
+  let yoyStatusLabel = 'Synced';
+  let yoyStatusColor = 'success';
+  if (yoySyncing) {
+    yoyStatusLabel = 'Syncing…';
+    yoyStatusColor = 'info';
+  } else if (yoyLastError) {
+    yoyStatusLabel = 'Attention';
+    yoyStatusColor = 'warning';
+  } else if (!yoyLastSync) {
+    yoyStatusLabel = 'Pending Sync';
+    yoyStatusColor = 'default';
+  }
+
+  const yoyLastSyncText = yoyLastSync
+    ? `Last sync: ${new Date(yoyLastSync).toLocaleTimeString()}`
+    : 'Not synced yet';
+
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }} data-testid="data-screen">
       <AppBar position="static" color="default" elevation={1}>
@@ -105,11 +128,122 @@ export default function DataManagerScreen({ session, info }) {
         </Toolbar>
       </AppBar>
 
+      {/* Connected Excel Workbook Section */}
+      <Paper
+        elevation={0}
+        sx={{
+          mx: 2,
+          mt: 1.5,
+          mb: 0.5,
+          p: 1.5,
+          border: '1px solid #cbd5e1',
+          borderRadius: 2,
+          background: '#f8fafc',
+        }}
+        data-testid="excel-sync-section"
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between">
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Typography variant="subtitle2" fontWeight={800} color="#0f172a">
+                Connected Excel Workbook:
+              </Typography>
+              <Chip
+                size="small"
+                label="YOY.xlsx"
+                color="primary"
+                sx={{ fontWeight: 700, fontSize: 12, height: 24 }}
+              />
+              <Chip
+                size="small"
+                color={yoyStatusColor}
+                label={yoyStatusLabel}
+                sx={{ fontWeight: 700, fontSize: 11, height: 22 }}
+                data-testid="yoy-status-chip"
+              />
+            </Stack>
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+              <Typography variant="caption" color="#475569" noWrap title={yoyFilePath} sx={{ maxWidth: 420, fontFamily: 'monospace', fontWeight: 600 }}>
+                {yoyFilePath}
+              </Typography>
+              <Typography variant="caption" color="#64748b">
+                • {yoyLastSyncText}
+              </Typography>
+              {yoyRowCount > 0 && (
+                <Typography variant="caption" color="#64748b">
+                  • {yoyRowCount} packets synchronized
+                </Typography>
+              )}
+            </Stack>
+          </Box>
+
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={async () => {
+                try {
+                  await desktop.call('yoy.open');
+                } catch (err) {
+                  fail(err);
+                }
+              }}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+              data-testid="open-yoy-btn"
+            >
+              Open in Excel
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={async () => {
+                try {
+                  await desktop.call('yoy.sync');
+                  setToast({ severity: 'success', message: 'YOY.xlsx synchronized with MongoDB.' });
+                } catch (err) {
+                  fail(err);
+                }
+              }}
+              disabled={yoySyncing}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+              data-testid="sync-yoy-btn"
+            >
+              {yoySyncing ? 'Syncing...' : 'Sync Now'}
+            </Button>
+            <Button
+              size="small"
+              onClick={() => run('yoy.showInFolder')}
+              sx={{ textTransform: 'none' }}
+              data-testid="folder-yoy-btn"
+            >
+              Folder
+            </Button>
+            <Button
+              size="small"
+              onClick={async () => {
+                const saved = await run('yoy.saveCopy');
+                if (saved) setToast({ severity: 'success', message: `Copy saved to ${saved}` });
+              }}
+              sx={{ textTransform: 'none' }}
+              data-testid="save-yoy-copy-btn"
+            >
+              Save Copy
+            </Button>
+          </Stack>
+        </Stack>
+
+        {yoyLastError && (
+          <Alert severity="warning" sx={{ mt: 1, py: 0.25 }} data-testid="yoy-error-banner">
+            {yoyLastError}
+          </Alert>
+        )}
+      </Paper>
+
       <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 2, py: 1 }}>
         {canManage && (
           <Button variant="contained" size="small" onClick={() => setAddOpen(true)} data-testid="add-record">Add record</Button>
         )}
-        <Button variant="outlined" size="small" onClick={() => run('sync.now')} disabled={status?.state === 'syncing'} data-testid="sync-now">Sync now</Button>
+        <Button variant="outlined" size="small" onClick={() => run('sync.now')} disabled={status?.state === 'syncing'} data-testid="sync-now">Full Sync</Button>
         <Box sx={{ flexGrow: 1 }} />
         <Typography variant="caption" color="text.secondary" noWrap title={info.workbookPath} data-testid="workbook-path">
           {info.workbookPath}
