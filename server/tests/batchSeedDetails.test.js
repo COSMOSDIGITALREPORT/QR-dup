@@ -239,3 +239,80 @@ describe('batch seed details — the existing batch and QR behaviour is unchange
     assert.equal(router.stack.filter((l) => l.route).length, 5, 'no route was added');
   });
 });
+
+describe('batch seed details — multi-seed batch creation', () => {
+  it('creates one parent batch with multiple seed entries and continuous unique QR IDs', async () => {
+    const entries = [
+      {
+        cropName: 'Sunflower',
+        seedCode: 'SF',
+        batchNumber: 'R-2',
+        batchCode: 'R2',
+        count: 3,
+        land: 'R',
+        line: '2',
+        location: 'R - 2 - 3',
+        year: 2026,
+      },
+      {
+        cropName: 'Rice',
+        seedCode: 'RI',
+        batchNumber: 'R-2',
+        batchCode: 'R2',
+        count: 3,
+        land: 'R',
+        line: '2',
+        location: 'R - 2 - 3',
+        year: 2026,
+      },
+    ];
+
+    const res = await post({ entries });
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.batch.count, 6);
+    assert.equal(res.body.batch.seeds.length, 2);
+    assert.equal(res.body.batch.seeds[0].crop, 'Sunflower');
+    assert.equal(res.body.batch.seeds[1].crop, 'Rice');
+    assert.equal(res.body.packets.length, 6);
+
+    const packetIds = res.body.packets.map((p) => p.uniqueId);
+    assert.equal(new Set(packetIds).size, 6, 'All 6 packet IDs must be unique');
+    assert.deepEqual(packetIds.slice(0, 3), ['PRD-SFR2-001', 'PRD-SFR2-002', 'PRD-SFR2-003']);
+    assert.deepEqual(packetIds.slice(3, 6), ['PRD-RIR2-001', 'PRD-RIR2-002', 'PRD-RIR2-003']);
+  });
+
+  it('continues location numbering and serials when matching packets exist', async () => {
+    // Mock existing packets for Sunflower at R-2 (serials 1..3)
+    SeedPacket.find = () => ({
+      select: () => ({
+        lean: async () => [
+          { uniqueId: 'PRD-SFR2-001', locationCode: 'R - 2 - 1', serialNumber: 1 },
+          { uniqueId: 'PRD-SFR2-002', locationCode: 'R - 2 - 2', serialNumber: 2 },
+          { uniqueId: 'PRD-SFR2-003', locationCode: 'R - 2 - 3', serialNumber: 3 },
+        ],
+      }),
+    });
+
+    const entries = [
+      {
+        cropName: 'Sunflower',
+        seedCode: 'SF',
+        batchNumber: 'R-2',
+        batchCode: 'R2',
+        count: 2,
+        land: 'R',
+        line: '2',
+        location: 'R - 2 - 2',
+      },
+    ];
+
+    const res = await post({ entries });
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.packets.length, 2);
+    assert.equal(res.body.packets[0].uniqueId, 'PRD-SFR2-004');
+    assert.equal(res.body.packets[0].locationCode, 'R - 2 - 4');
+    assert.equal(res.body.packets[1].uniqueId, 'PRD-SFR2-005');
+    assert.equal(res.body.packets[1].locationCode, 'R - 2 - 5');
+  });
+});

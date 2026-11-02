@@ -25,6 +25,30 @@ function parseLocationString(loc) {
   return null;
 }
 
+const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+async function checkPacketExists(uniqueId) {
+  if (mongoose.connection.readyState !== 1 && SeedPacket.exists === mongoose.Model.exists) {
+    return false;
+  }
+  try {
+    return Boolean(await SeedPacket.exists({ uniqueId }));
+  } catch (_) {
+    return false;
+  }
+}
+
+async function findExistingPackets(query) {
+  if (mongoose.connection.readyState !== 1 && SeedPacket.find === mongoose.Model.find) {
+    return [];
+  }
+  try {
+    return await SeedPacket.find(query).select('uniqueId locationCode serialNumber').lean();
+  } catch (_) {
+    return [];
+  }
+}
+
 // Validates the optional seed-management details of a new batch (see
 // DETAIL_FIELDS in SeedBatch.js). Nothing is required and nothing is derived:
 // a field that was not sent is stored blank, and Total is whatever was
@@ -393,6 +417,82 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
       const seedCategory = processedEntries.map(e => e.seedCategory).filter(Boolean).join(', ') || '';
       const batchNumber = processedEntries.map(e => e.batchNumber).join(', ');
 
+      const packetDefs = [];
+      const usedUniqueIds = new Set();
+
+      for (const entry of processedEntries) {
+        const sc = entry.seedCode;
+        const bc = entry.batchCode;
+        const land = entry.land;
+        const line = entry.line;
+        const crop = entry.cropName;
+
+        const existingPackets = await findExistingPackets({
+          $or: [
+            { crop: crop, locationCode: new RegExp(`^${escapeRegex(land)}\\s*-\\s*${escapeRegex(line)}\\s*-`) },
+            { seedType: crop, locationCode: new RegExp(`^${escapeRegex(land)}\\s*-\\s*${escapeRegex(line)}\\s*-`) },
+            { seedCode: sc, locationCode: new RegExp(`^${escapeRegex(land)}\\s*-\\s*${escapeRegex(line)}\\s*-`) },
+            { uniqueId: new RegExp(`^PRD-${escapeRegex(sc)}${escapeRegex(bc)}-`) },
+          ],
+        });
+
+        const currentBatchPackets = packetDefs.filter(p =>
+          (p.crop === crop || p.seedCode === sc) &&
+          p.locationCode && p.locationCode.startsWith(`${land} - ${line} -`)
+        );
+
+        let maxSerial = 0;
+        const allPackets = [...(existingPackets || []), ...currentBatchPackets];
+        for (const p of allPackets) {
+          if (typeof p.serialNumber === 'number' && Number.isFinite(p.serialNumber) && p.serialNumber > maxSerial) {
+            maxSerial = p.serialNumber;
+          }
+          if (p.locationCode) {
+            const parts = p.locationCode.split(/\s*-\s*/);
+            const num = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(num) && num > maxSerial) {
+              maxSerial = num;
+            }
+          }
+          if (p.uniqueId) {
+            const match = p.uniqueId.match(/-(\d+)$/);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (!isNaN(num) && num > maxSerial) {
+                maxSerial = num;
+              }
+            }
+          }
+        }
+
+        const startSerial = maxSerial + 1;
+        const endSerial = maxSerial + entry.count;
+        entry.endSerial = endSerial;
+
+        for (let seq = startSerial; seq <= endSerial; seq++) {
+          let uniqueId = `PRD-${sc}${bc}-${String(seq).padStart(3, '0')}`;
+          if (usedUniqueIds.has(uniqueId) || await checkPacketExists(uniqueId)) {
+            uniqueId = `PRD-${sc}${bc}-${entry.index + 1}-${String(seq).padStart(3, '0')}`;
+            let attempt = 1;
+            while (usedUniqueIds.has(uniqueId) || await checkPacketExists(uniqueId)) {
+              uniqueId = `PRD-${sc}${bc}-${entry.index + 1}-${String(seq).padStart(3, '0')}-${attempt++}`;
+            }
+          }
+          usedUniqueIds.add(uniqueId);
+
+          packetDefs.push({
+            uniqueId,
+            fileName: `${uniqueId}.png`,
+            crop: entry.cropName,
+            seedType: entry.seedType,
+            seedCode: sc,
+            locationCode: `${land} - ${line} - ${seq}`,
+            serialNumber: seq,
+            seedIndex: entry.index,
+          });
+        }
+      }
+
       const seedsData = processedEntries.map(e => ({
         crop: e.cropName,
         seedType: e.seedType,
@@ -403,7 +503,7 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
         count: e.count,
         land: e.land,
         line: e.line,
-        locationCode: e.location,
+        locationCode: e.endSerial ? `${e.land} - ${e.line} - ${e.endSerial}` : e.location,
         year: e.year,
         previousYear: e.previousYear,
         previousLocationCode: e.previousLocationCode,
@@ -430,29 +530,6 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
         createdBy: req.admin._id,
       });
 
-      const packetDefs = [];
-      const usedUniqueIds = new Set();
-      for (const entry of processedEntries) {
-        const sc = entry.seedCode;
-        const bc = entry.batchCode;
-        for (let i = 1; i <= entry.count; i++) {
-          let uniqueId = `PRD-${sc}${bc}-${String(i).padStart(3, '0')}`;
-          if (usedUniqueIds.has(uniqueId)) {
-            uniqueId = `PRD-${sc}${bc}-${entry.index + 1}-${String(i).padStart(3, '0')}`;
-          }
-          usedUniqueIds.add(uniqueId);
-          packetDefs.push({
-            uniqueId,
-            fileName: `${uniqueId}.png`,
-            crop: entry.cropName,
-            seedType: entry.seedType,
-            seedCode: sc,
-            locationCode: `${entry.land} - ${entry.line} - ${i}`,
-            serialNumber: i,
-          });
-        }
-      }
-
       const uploadedFileIds = [];
       try {
         await Promise.all(packetDefs.map(async (def) => {
@@ -466,55 +543,56 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
           });
           uploadedFileIds.push(def.fileId);
         }));
+
+        const packets = packetDefs.map(def => ({
+          uniqueId:     def.uniqueId,
+          batchId:      batch._id,
+          qrCodeUrl:    `/api/qr/${def.fileId}`,
+          status:       'empty',
+          crop:         def.crop,
+          seedType:     def.seedType,
+          seedCode:     def.seedCode,
+          locationCode: def.locationCode,
+          serialNumber: def.serialNumber,
+        }));
+
+        const created = await SeedPacket.insertMany(packets);
+        batch.packets = created.map(p => p._id);
+        await batch.save();
+
+        return res.status(201).json({
+          success: true,
+          message: `${totalCount} QR codes generated`,
+          batch: {
+            _id:          batch._id,
+            batchName:    batch.batchName,
+            seedType:     batch.seedType,
+            seedCategory: batch.seedCategory,
+            seedCode:     batch.seedCode,
+            batchNumber:  batch.batchNumber,
+            batchCode:    batch.batchCode,
+            count:        batch.count,
+            month:        batch.month,
+            year:         batch.year,
+            warehouse:    batch.warehouse,
+            rack:         batch.rack,
+            shelf:        batch.shelf,
+            seeds:        batch.seeds,
+            ...Object.fromEntries(DETAIL_FIELDS.map(({ field }) => [field, batch[field]])),
+            createdAt:    batch.createdAt,
+          },
+          packets: created.map(p => ({
+            uniqueId:     p.uniqueId,
+            qrCodeUrl:    p.qrCodeUrl,
+            crop:         p.crop,
+            locationCode: p.locationCode,
+          })),
+        });
       } catch (err) {
         await Promise.all(uploadedFileIds.map(id => deleteQrFile(id)));
+        await SeedBatch.findByIdAndDelete(batch._id);
         throw err;
       }
-
-      const packets = packetDefs.map(def => ({
-        uniqueId:     def.uniqueId,
-        batchId:      batch._id,
-        qrCodeUrl:    `/api/qr/${def.fileId}`,
-        status:       'empty',
-        crop:         def.crop,
-        seedType:     def.seedType,
-        seedCode:     def.seedCode,
-        locationCode: def.locationCode,
-        serialNumber: def.serialNumber,
-      }));
-
-      const created = await SeedPacket.insertMany(packets);
-      batch.packets = created.map(p => p._id);
-      await batch.save();
-
-      return res.status(201).json({
-        success: true,
-        message: `${totalCount} QR codes generated`,
-        batch: {
-          _id:          batch._id,
-          batchName:    batch.batchName,
-          seedType:     batch.seedType,
-          seedCategory: batch.seedCategory,
-          seedCode:     batch.seedCode,
-          batchNumber:  batch.batchNumber,
-          batchCode:    batch.batchCode,
-          count:        batch.count,
-          month:        batch.month,
-          year:         batch.year,
-          warehouse:    batch.warehouse,
-          rack:         batch.rack,
-          shelf:        batch.shelf,
-          seeds:        batch.seeds,
-          ...Object.fromEntries(DETAIL_FIELDS.map(({ field }) => [field, batch[field]])),
-          createdAt:    batch.createdAt,
-        },
-        packets: created.map(p => ({
-          uniqueId:     p.uniqueId,
-          qrCodeUrl:    p.qrCodeUrl,
-          crop:         p.crop,
-          locationCode: p.locationCode,
-        })),
-      });
     }
 
     // Single-entry legacy flow
@@ -555,12 +633,19 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
       ...details,
     });
 
-    const packetDefs = Array.from({ length: total }, (_, i) => {
-      const serial   = String(i + 1).padStart(3, '0');
-      const uniqueId = `PRD-${SC}${BC}-${serial}`;
-      const fileName = `${uniqueId}.png`;
-      return { uniqueId, fileName };
-    });
+    const packetDefs = [];
+    const usedUniqueIds = new Set();
+    for (let i = 0; i < total; i++) {
+      let uniqueId = `PRD-${SC}${BC}-${String(i + 1).padStart(3, '0')}`;
+      if (usedUniqueIds.has(uniqueId) || await checkPacketExists(uniqueId)) {
+        let attempt = 1;
+        while (usedUniqueIds.has(uniqueId) || await checkPacketExists(uniqueId)) {
+          uniqueId = `PRD-${SC}${BC}-${String(i + 1).padStart(3, '0')}-${attempt++}`;
+        }
+      }
+      usedUniqueIds.add(uniqueId);
+      packetDefs.push({ uniqueId, fileName: `${uniqueId}.png` });
+    }
 
     const uploadedFileIds = [];
     try {
@@ -575,45 +660,48 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
         });
         uploadedFileIds.push(def.fileId);
       }));
+
+      const packets = packetDefs.map(({ uniqueId, fileId }) => ({
+        uniqueId,
+        batchId:   batch._id,
+        qrCodeUrl: `/api/qr/${fileId}`,
+        status:    'empty',
+      }));
+
+      const created = await SeedPacket.insertMany(packets);
+      batch.packets = created.map(p => p._id);
+      await batch.save();
+
+      res.status(201).json({
+        success: true,
+        message: `${total} QR codes generated`,
+        batch: {
+          _id:       batch._id,
+          batchName: batch.batchName,
+          seedType:  batch.seedType,
+          seedCategory: batch.seedCategory,
+          seedCode:  batch.seedCode,
+          batchNumber: batch.batchNumber,
+          batchCode: batch.batchCode,
+          count:     batch.count,
+          month:     batch.month,
+          year:      batch.year,
+          warehouse: batch.warehouse,
+          rack:      batch.rack,
+          shelf:     batch.shelf,
+          ...Object.fromEntries(DETAIL_FIELDS.map(({ field }) => [field, batch[field]])),
+          createdAt: batch.createdAt,
+        },
+        packets: created.map(p => ({
+          uniqueId:  p.uniqueId,
+          qrCodeUrl: p.qrCodeUrl,
+        })),
+      });
     } catch (err) {
       await Promise.all(uploadedFileIds.map(id => deleteQrFile(id)));
+      await SeedBatch.findByIdAndDelete(batch._id);
       throw err;
     }
-
-    const packets = packetDefs.map(({ uniqueId, fileId }) => ({
-      uniqueId,
-      batchId:   batch._id,
-      qrCodeUrl: `/api/qr/${fileId}`,
-      status:    'empty',
-    }));
-
-    const created = await SeedPacket.insertMany(packets);
-    batch.packets = created.map(p => p._id);
-    await batch.save();
-
-    res.status(201).json({
-      success: true,
-      message: `${total} QR codes generated`,
-      batch: {
-        _id:       batch._id,
-        batchName: batch.batchName,
-        seedType:  batch.seedType,
-        seedCategory: batch.seedCategory,
-        seedCode:  batch.seedCode,
-        batchNumber: batch.batchNumber,
-        batchCode: batch.batchCode,
-        count:     batch.count,
-        month:     batch.month,
-        year:      batch.year,
-        warehouse: batch.warehouse,
-        rack:      batch.rack,
-        shelf:     batch.shelf,
-        // The details as stored, so the form can confirm what was saved.
-        ...Object.fromEntries(DETAIL_FIELDS.map(({ field }) => [field, batch[field]])),
-        createdAt: batch.createdAt,
-      },
-      packets: created.map(p => ({ uniqueId: p.uniqueId, qrCodeUrl: p.qrCodeUrl })),
-    });
   } catch (err) {
     sendServerError(res, err, 'batchRoutes');
   }
@@ -671,8 +759,6 @@ router.get('/inventory', protect, async (req, res) => {
     const batchOptionFilter = seedType ? { seedType } : {};
     const batchOptions = (await SeedBatch.distinct('batchNumber', batchOptionFilter)).filter(Boolean).sort((a, b) => a.localeCompare(b));
     const warehouseOptions = ['Warehouse A', 'Warehouse B', 'Warehouse C'];
-
-    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     const batchMatch = {};
     if (seedType)    batchMatch.seedType = seedType;
