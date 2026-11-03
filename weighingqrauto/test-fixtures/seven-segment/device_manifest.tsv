@@ -1,0 +1,99 @@
+# file<TAB>expected app result<TAB>kind
+# expected: the weight in kg, REJECT (must be refused), or alternatives joined by | where either is acceptable.
+# kind: real = photo of an actual scale display (so far always taken off a screen), phone = frame from the
+#       phone's camera during a live test, synthetic = generated, derived = a real image deliberately degraded.
+#       physical = photo of a physical scale (not of a screen). physical/derived_* are made from it by
+#       scripts/derive-led-fixtures.py.
+# ZERO: the display shows zero - it must be read as zero and refused for that reason (zero is not a
+#       weight to record); a refusal for any other reason does not count.
+real/crop_2400x960.jpg	500.0	real
+real/crop_loose_tilted.jpg	500.0	real
+real/crop_tight_1.jpg	500.0	real
+real/full_photo_1.jpg	500.0	real
+real/full_photo_2_moire.jpg	500.0	real
+led/red_3190_a.png	3190	phone
+led/red_3190_b.png	3190	phone
+led/red_3190_c.png	3190	phone
+led/red_3190_tilted.png	3190	phone
+led/red_finger_over_digits.png	90|REJECT	phone
+led/not_a_display_keyboard.png	REJECT	phone
+led/not_a_display_blur.png	REJECT	phone
+led/display_too_far.png	REJECT	phone
+device/led_zero_a.png	ZERO	phone
+device/led_zero_b.png	ZERO	phone
+device/led_zero_c.png	ZERO	phone
+device/led_zero_d.png	ZERO	phone
+device/led_zero_small.png	ZERO|REJECT	phone
+device/led_zero_tilted.png	ZERO|REJECT	phone
+synthetic/clean_12p5.png	12.5	synthetic
+synthetic/clean_3456.png	3456	synthetic
+synthetic/clean_0p5.png	0.5	synthetic
+synthetic/clean_7p25.png	7.25	synthetic
+synthetic/clean_87p3.png	87.3	synthetic
+synthetic/clean_123p4.png	123.4	synthetic
+synthetic/glare_500p0.png	REJECT	synthetic
+synthetic/blank_kg.png	REJECT	synthetic
+device/derived_rotated8.jpg	500.0|REJECT	derived
+device/derived_upside_down.jpg	REJECT	derived
+device/derived_blurred.jpg	500.0|REJECT	derived
+device/derived_lowres300.jpg	500.0|REJECT	derived
+device/derived_led_glare.png	3190|REJECT	derived
+device/led_glare_hard_streak.png	REJECT	derived
+device/led_glare_inside_one_digit.png	REJECT	derived
+device/led_glare_off_digits_corner.png	3190|REJECT	derived
+device/led_glare_over_first_digit.png	REJECT	derived
+device/led_glare_soft_wide.png	REJECT	derived
+device/lcd_glare_clean_123p4_last_digits.png	REJECT	derived
+device/lcd_glare_clean_123p4_small_inside.png	REJECT	derived
+device/lcd_glare_clean_123p4_streak.png	REJECT	derived
+device/lcd_glare_clean_3456_last_digits.png	REJECT	derived
+device/lcd_glare_clean_3456_streak.png	REJECT	derived
+device/lcd_glare_crop_2400x960_last_digits.png	REJECT	derived
+device/lcd_glare_crop_2400x960_small_inside.png	REJECT	derived
+device/ledstyle_green_vfd_clean_111p1.png	111.1	synthetic
+device/ledstyle_blue_on_black_clean_19p1.png	19.1	synthetic
+device/ledstyle_orange_on_brown_digit_1.png	510.0	synthetic
+device/ledstyle_green_vfd_harsh_1_13p1.png	13.1	synthetic
+device/ledstyle_white_on_blue_clean_123p4.png	123.4|REJECT	synthetic
+# Physical red LED scale. The display in this photo shows 1.70 (middle digit: top bar and both right-hand
+# segments lit). What the scale was actually loaded with has not been confirmed independently.
+physical/led_red_1p70_whole_photo.jpg	1.70	physical
+physical/derived_reflection_over_1.jpg	REJECT	derived
+physical/derived_reflection_over_point.jpg	1.70|REJECT	derived
+physical/derived_reflection_streak.jpg	REJECT	derived
+physical/derived_blurred.jpg	1.70|REJECT	derived
+physical/derived_slightly_soft.jpg	1.70|REJECT	derived
+physical/derived_cut_left_1_outside.jpg	REJECT	derived
+physical/derived_cut_left_through_1.jpg	REJECT	derived
+physical/derived_cut_right_0_outside.jpg	REJECT	derived
+physical/derived_cut_bottom.jpg	REJECT	derived
+physical/derived_rotated_8.jpg	1.70|REJECT	derived
+physical/derived_rotated_minus_8.jpg	1.70|REJECT	derived
+physical/derived_too_small.jpg	1.70|REJECT	derived
+# Live camera frames the phone itself saved on 15 Oct 2026 (LiveWeightModule debug capture), of the physical
+# 1.70 photo shown on a PC screen - NOT the physical scale. Before the decodeGlow fix all 24 were refused.
+# frame_19/20 show the desk, not the display.
+live-screen/frame_00.jpg	1.70|REJECT	screen-live
+live-screen/frame_01.jpg	1.70|REJECT	screen-live
+live-screen/frame_02.jpg	1.70|REJECT	screen-live
+live-screen/frame_03.jpg	1.70|REJECT	screen-live
+live-screen/frame_04.jpg	1.70|REJECT	screen-live
+live-screen/frame_05.jpg	1.70|REJECT	screen-live
+live-screen/frame_06.jpg	1.70|REJECT	screen-live
+live-screen/frame_07.jpg	1.70|REJECT	screen-live
+live-screen/frame_08.jpg	1.70|REJECT	screen-live
+live-screen/frame_09.jpg	1.70|REJECT	screen-live
+live-screen/frame_10.jpg	1.70|REJECT	screen-live
+live-screen/frame_11.jpg	1.70|REJECT	screen-live
+live-screen/frame_12.jpg	1.70|REJECT	screen-live
+live-screen/frame_13.jpg	1.70|REJECT	screen-live
+live-screen/frame_14.jpg	1.70|REJECT	screen-live
+live-screen/frame_15.jpg	1.70|REJECT	screen-live
+live-screen/frame_16.jpg	1.70|REJECT	screen-live
+live-screen/frame_17.jpg	1.70|REJECT	screen-live
+live-screen/frame_18.jpg	1.70|REJECT	screen-live
+live-screen/frame_19.jpg	REJECT	screen-live
+live-screen/frame_20.jpg	REJECT	screen-live
+live-screen/frame_21.jpg	1.70|REJECT	screen-live
+live-screen/frame_22.jpg	1.70|REJECT	screen-live
+live-screen/frame_23.jpg	1.70|REJECT	screen-live

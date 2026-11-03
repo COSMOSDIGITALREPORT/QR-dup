@@ -1,0 +1,111 @@
+﻿Configuration on demand is an incubating feature.
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :
+.\gradlew : ********************************************************************************
+At line:1 char:619
++ ...  logcat -c; .\gradlew :ppocr-sdk:connectedDebugAndroidTest "-Pandroid ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (***************...***************:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+WARNING: Setting `newArchEnabled=false` in your `gradle.properties` file is not
+supported anymore since React Native 0.82.
+
+You can remove the line from your `gradle.properties` file.
+
+The application will run with the New Architecture enabled by default.
+
+********************************************************************************
+
+
+> Task :ppocr-sdk:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :ppocr-sdk:preBuild UP-TO-DATE
+> Task :ppocr-sdk:preDebugBuild UP-TO-DATE
+> Task :ppocr-sdk:generateDebugBuildConfig UP-TO-DATE
+> Task :ppocr-sdk:generateDebugResValues UP-TO-DATE
+> Task :ppocr-sdk:generateDebugResources UP-TO-DATE
+> Task :ppocr-sdk:packageDebugResources UP-TO-DATE
+> Task :ppocr-sdk:parseDebugLocalResources UP-TO-DATE
+> Task :ppocr-sdk:generateDebugRFile UP-TO-DATE
+> Task :ppocr-sdk:compileDebugKotlin UP-TO-DATE
+> Task :ppocr-sdk:javaPreCompileDebug UP-TO-DATE
+> Task :ppocr-sdk:compileDebugJavaWithJavac UP-TO-DATE
+> Task :ppocr-sdk:preDebugAndroidTestBuild UP-TO-DATE
+> Task :ppocr-sdk:extractDeepLinksDebug UP-TO-DATE
+> Task :ppocr-sdk:processDebugManifest UP-TO-DATE
+> Task :ppocr-sdk:bundleLibCompileToJarDebug
+> Task :ppocr-sdk:processDebugAndroidTestManifest
+> Task :ppocr-sdk:generateDebugAndroidTestBuildConfig
+> Task :ppocr-sdk:writeDebugAarMetadata UP-TO-DATE
+> Task :ppocr-sdk:compileDebugLibraryResources UP-TO-DATE
+> Task :ppocr-sdk:checkDebugAndroidTestAarMetadata
+> Task :ppocr-sdk:generateDebugAndroidTestResValues FROM-CACHE
+> Task :ppocr-sdk:mapDebugAndroidTestSourceSetPaths
+> Task :ppocr-sdk:generateDebugAndroidTestResources
+> Task :ppocr-sdk:javaPreCompileDebugAndroidTest FROM-CACHE
+> Task :ppocr-sdk:mergeDebugAndroidTestShaders
+> Task :ppocr-sdk:compileDebugAndroidTestShaders NO-SOURCE
+> Task :ppocr-sdk:generateDebugAndroidTestAssets UP-TO-DATE
+> Task :ppocr-sdk:mergeDebugShaders UP-TO-DATE
+> Task :ppocr-sdk:compileDebugShaders NO-SOURCE
+> Task :ppocr-sdk:generateDebugAssets UP-TO-DATE
+> Task :ppocr-sdk:mergeDebugAssets UP-TO-DATE
+> Task :ppocr-sdk:mergeDebugAndroidTestAssets
+> Task :ppocr-sdk:compressDebugAndroidTestAssets
+> Task :ppocr-sdk:desugarDebugAndroidTestFileDependencies FROM-CACHE
+> Task :ppocr-sdk:bundleLibRuntimeToJarDebug
+> Task :ppocr-sdk:processDebugJavaRes
+> Task :ppocr-sdk:mergeDebugJniLibFolders UP-TO-DATE
+> Task :ppocr-sdk:mergeDebugNativeLibs NO-SOURCE
+> Task :ppocr-sdk:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :ppocr-sdk:mergeDebugAndroidTestJniLibFolders
+> Task :ppocr-sdk:bundleLibRuntimeToDirDebug
+> Task :ppocr-sdk:checkDebugAndroidTestDuplicateClasses
+> Task :ppocr-sdk:mergeDebugAndroidTestResources
+> Task :ppocr-sdk:mergeDebugAndroidTestNativeLibs
+> Task :ppocr-sdk:mergeLibDexDebugAndroidTest
+
+> Task :ppocr-sdk:stripDebugAndroidTestDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libc++_shared.so, libonnxruntime.so, libonnxruntime4j_jni.so, libopencv_java4.so. Run with --info option to learn more.
+
+> Task :ppocr-sdk:validateSigningDebugAndroidTest
+> Task :ppocr-sdk:writeDebugAndroidTestSigningConfigVersions
+> Task :ppocr-sdk:processDebugAndroidTestResources
+> Task :ppocr-sdk:mergeExtDexDebugAndroidTest
+
+> Task :ppocr-sdk:compileDebugAndroidTestKotlin
+w: file:///D:/dapatri%20argo/weighingqrauto/weighingqrauto/android/ppocr-sdk/src/androidTest/java/com/paddle/ocr/benchmark/OCRBenchmarkTest.kt:75:20 'fun get(p0: String!): Any?' is deprecated. Deprecated in Java.
+
+> Task :ppocr-sdk:compileDebugAndroidTestJavaWithJavac
+> Task :ppocr-sdk:dexBuilderDebugAndroidTest
+> Task :ppocr-sdk:mergeDebugAndroidTestGlobalSynthetics FROM-CACHE
+> Task :ppocr-sdk:processDebugAndroidTestJavaRes
+> Task :ppocr-sdk:mergeProjectDexDebugAndroidTest
+> Task :ppocr-sdk:mergeDebugAndroidTestJavaResource
+> Task :ppocr-sdk:packageDebugAndroidTest
+> Task :ppocr-sdk:createDebugAndroidTestApkListingFileRedirect
+> Task :ppocr-sdk:connectedDebugAndroidTest
+Starting 2 tests on V2403 - 16
+
+V2403 - 16 Tests 1/2 completed. (0 skipped) (0 failed)

@@ -2,11 +2,9 @@ import { useState } from 'react';
 import {
   Box, Button, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Typography, Chip, CircularProgress, Grid,
-  Checkbox, FormControlLabel, MenuItem,
+  MenuItem,
 } from '@mui/material';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { batchAPI } from '../services/api';
 
 const SEED_PRESETS = [
@@ -111,17 +109,6 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
     });
   };
 
-  const handleAddMore = () => {
-    setEntries(prev => [...prev, createInitialEntry(Date.now() + Math.random())]);
-  };
-
-  const handleRemoveEntry = (index) => {
-    setEntries(prev => {
-      if (prev.length <= 1) return prev;
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
   const handleClose = () => {
     if (creating) return;
     setCreateError('');
@@ -131,50 +118,49 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
   const handleCreate = async () => {
     setCreateError('');
 
-    // Validate each crop entry
+    // Validate crop entry
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
-      const prefix = entries.length > 1 ? `[Entry #${i + 1}] ` : '';
       if (!entry.cropName?.trim()) {
-        setCreateError(`${prefix}Please enter Crop Name`);
+        setCreateError('Please enter Crop Name');
         return;
       }
       if (!entry.seedCode?.trim()) {
-        setCreateError(`${prefix}Please enter Seed Code`);
+        setCreateError('Please enter Seed Code');
         return;
       }
       if (!entry.land?.trim()) {
-        setCreateError(`${prefix}Please enter Land (e.g. R)`);
+        setCreateError('Please enter Land (e.g. R)');
         return;
       }
       if (!entry.line?.trim()) {
-        setCreateError(`${prefix}Please enter Line (e.g. 2)`);
+        setCreateError('Please enter Line (e.g. 2)');
         return;
       }
       if (!entry.srNo || !String(entry.srNo).trim()) {
-        setCreateError(`${prefix}Please enter Sr. No. (total QR count, e.g. 3)`);
+        setCreateError('Please enter Sr. No. (total QR count, e.g. 3)');
         return;
       }
       const parsed = parseLocation(entry);
       if (!parsed) {
-        setCreateError(`${prefix}Location must follow format: Land - Line - Sr. No. (e.g. R-2-3)`);
+        setCreateError('Location must follow format: Land - Line - Sr. No. (e.g. R-2-3)');
         return;
       }
       if (parsed.count < 1 || parsed.count > 5000) {
-        setCreateError(`${prefix}Sr. No. (QR count) must be between 1 and 5000`);
+        setCreateError('Sr. No. (QR count) must be between 1 and 5000');
         return;
       }
       if (entry.year && String(entry.year).trim()) {
         const y = Number(entry.year);
         if (!Number.isFinite(y)) {
-          setCreateError(`${prefix}Year must be a number`);
+          setCreateError('Year must be a number');
           return;
         }
       }
       if (entry.previousYear && String(entry.previousYear).trim()) {
         const py = Number(entry.previousYear);
         if (!Number.isFinite(py)) {
-          setCreateError(`${prefix}PreviousYear must be a number`);
+          setCreateError('PreviousYear must be a number');
           return;
         }
       }
@@ -260,39 +246,7 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
             : null;
 
           return (
-            <Box
-              key={entry.id || index}
-              sx={{
-                p: entries.length > 1 ? 2 : 0,
-                mb: entries.length > 1 ? 2.5 : 1,
-                borderRadius: 2.5,
-                border: entries.length > 1 ? '1px solid #e2e8f0' : 'none',
-                background: entries.length > 1 ? '#f8fafc' : 'transparent',
-              }}
-            >
-              {entries.length > 1 && (
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, pb: 0.8, borderBottom: '1px solid #e2e8f0' }}>
-                  <Typography sx={{ fontWeight: 800, fontSize: 13.5, color: '#1a227f', display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{
-                      width: 22, height: 22, borderRadius: '50%',
-                      background: '#1a227f', color: '#fff', fontSize: 11,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800
-                    }}>
-                      {index + 1}
-                    </Box>
-                    Crop Entry #{index + 1} {entry.cropName ? `— ${entry.cropName}` : ''}
-                  </Typography>
-                  <Button
-                    size="small"
-                    color="error"
-                    startIcon={<DeleteOutlineIcon />}
-                    onClick={() => handleRemoveEntry(index)}
-                    sx={{ fontSize: 11.5, textTransform: 'none', fontWeight: 600 }}
-                  >
-                    Remove
-                  </Button>
-                </Box>
-              )}
+            <Box key={entry.id || index}>
 
               {/* Crop Name Quick Select chips */}
               <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', mb: 1, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
@@ -555,73 +509,6 @@ export default function NewBatchDialog({ open, onClose, onCreated }) {
             </Box>
           );
         })}
-
-        {/* Add More checkbox-style control */}
-        <Box
-          sx={{
-            mt: 1.5,
-            p: 1.2,
-            border: '1.5px dashed #1a227f44',
-            borderRadius: 2,
-            background: '#f8fafc',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            '&:hover': { background: '#f0f4ff', borderColor: '#1a227f' },
-          }}
-        >
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={false}
-                onChange={handleAddMore}
-                sx={{
-                  color: '#1a227f',
-                  '&.Mui-checked': { color: '#1a227f' },
-                }}
-              />
-            }
-            label={
-              <Box onClick={handleAddMore} sx={{ cursor: 'pointer' }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
-                  Add More
-                </Typography>
-                <Typography sx={{ fontSize: 10.5, color: '#64748b' }}>
-                  Check to add another complete crop entry form below
-                </Typography>
-              </Box>
-            }
-          />
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={handleAddMore}
-            startIcon={<AddIcon />}
-            sx={{
-              borderRadius: 2,
-              borderColor: '#1a227f',
-              color: '#1a227f',
-              fontWeight: 700,
-              textTransform: 'none',
-              fontSize: 11.5,
-            }}
-          >
-            Add More
-          </Button>
-        </Box>
-
-        {entries.length > 1 && (
-          <Box sx={{ p: 1.2, background: '#f1f5f9', borderRadius: 2, mt: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>
-              Total Entries: {entries.length}
-            </Typography>
-            <Chip
-              label={`${totalCount} Total QRs`}
-              size="small"
-              sx={{ fontWeight: 800, background: '#1a227f', color: '#fff' }}
-            />
-          </Box>
-        )}
 
         {createError && (
           <Box sx={{ mt: 2, p: 1.5, background: '#fef2f2', borderRadius: 2, border: '1px solid #fecaca' }}>

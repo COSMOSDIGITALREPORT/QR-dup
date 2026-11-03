@@ -1,0 +1,9 @@
+# file<TAB>prototype_result (live reader: LCD, then LED)
+led/red_3190_a.png	3190
+led/red_3190_b.png	3190
+led/red_3190_tilted.png	3190
+led/red_3190_c.png	3190
+led/red_finger_over_digits.png	90
+led/not_a_display_keyboard.png	REJECT
+led/not_a_display_blur.png	REJECT
+led/display_too_far.png	REJECT

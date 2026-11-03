@@ -1,0 +1,49 @@
+# file<TAB>python_result<TAB>true_value(synthetic only)
+real/crop_2400x960.jpg	500.0	500.0
+real/crop_loose_tilted.jpg	500.0	500.0
+real/crop_tight_1.jpg	500.0	500.0
+real/full_photo_1.jpg	500.0	500.0
+real/full_photo_2_moire.jpg	500.0	500.0
+synthetic/clean_0p0.png	0.0	0.0
+synthetic/clean_1p0.png	1.0	1.0
+synthetic/clean_12p5.png	12.5	12.5
+synthetic/clean_87p3.png	87.3	87.3
+synthetic/clean_123p4.png	123.4	123.4
+synthetic/clean_500p0.png	500.0	500.0
+synthetic/clean_3456.png	3456	3456
+synthetic/clean_0p5.png	0.5	0.5
+synthetic/clean_19p1.png	REJECT:ambiguous-segment	19.1
+synthetic/clean_111p1.png	111.1	111.1
+synthetic/clean_7p25.png	7.25	7.25
+synthetic/clean_9.png	9	9
+synthetic/digit_0.png	500.0	500.0
+synthetic/digit_1.png	510.0	510.0
+synthetic/digit_2.png	520.0	520.0
+synthetic/digit_3.png	530.0	530.0
+synthetic/digit_4.png	540.0	540.0
+synthetic/digit_5.png	550.0	550.0
+synthetic/digit_6.png	560.0	560.0
+synthetic/digit_7.png	570.0	570.0
+synthetic/digit_8.png	580.0	580.0
+synthetic/digit_9.png	590.0	590.0
+synthetic/harsh_0_260.png	REJECT:ambiguous-segment	260
+synthetic/harsh_1_13p1.png	13.1	13.1
+synthetic/harsh_2_6030.png	6030	6030
+synthetic/harsh_3_1p9.png	1.9	1.9
+synthetic/harsh_4_57p9.png	57.9	57.9
+synthetic/harsh_5_5p74.png	REJECT:ambiguous-segment	5.74
+synthetic/harsh_6_18p95.png	18.95	18.95
+synthetic/harsh_7_10p4.png	REJECT:ambiguous-segment	10.4
+synthetic/harsh_8_7p0.png	7.0	7.0
+synthetic/harsh_9_684.png	684	684
+synthetic/harsh_10_2p1.png	2.1	2.1
+synthetic/harsh_11_6p8.png	6.8	6.8
+synthetic/harsh_12_47p86.png	47.86	47.86
+synthetic/harsh_13_1p5.png	REJECT:unassigned-ink	1.5
+synthetic/glare_500p0.png	REJECT:unassigned-ink	500.0
+synthetic/glare_12p5.png	REJECT:unassigned-ink	12.5
+synthetic/blank_nokg.png	REJECT:low-contrast	
+synthetic/blank_kg.png	REJECT:low-contrast	
+synthetic/partial_0_missing_f.png	REJECT:unknown-pattern	
+synthetic/partial_5_missing_g.png	REJECT:unassigned-ink	
+synthetic/partial_nonsense.png	REJECT:unassigned-ink	

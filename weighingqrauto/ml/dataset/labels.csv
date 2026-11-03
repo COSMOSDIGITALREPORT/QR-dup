@@ -1,0 +1,2 @@
+image,truth,unit,source,session,display_type,decimal_format,lighting,glare,blur,tilt,distance,readable,verified_by,notes
+images/s01_0001.jpg,1.70,kg,physical,s01,led-red,1.2,normal,none,none,slight,normal,yes,display reading confirmed by the user on 2026-10-15 (not written down at capture),same photo as test-fixtures/seven-segment/physical/led_red_1p70_whole_photo.jpg; stray lit dot under the blank first digit
