@@ -184,4 +184,84 @@ describe('batch duplicate functionality — location-wise QR generation', () => 
     assert.equal(createdBatches[0].count, 4);
     assert.equal(createdBatches[0].batchName, 'Soyabean R-2 (Duplicate)');
   });
+
+  it('1. Duplicate a batch with no extra QR codes (full payload with seedCode, batchCode, count, location)', async () => {
+    const res = await post({
+      action: 'duplicate',
+      batchId: VALID_SOURCE_ID,
+      seedCode: 'SO',
+      batchCode: 'R2',
+      count: 5,
+      location: 'R - 2 - 5',
+      batchName: 'Soyabean R-2 (Exact Duplicate)',
+      rows: [
+        { location: 'R-2-1', cropNames: ['Soyabean'] },
+        { location: 'R-2-2', cropNames: ['Soyabean'] },
+        { location: 'R-2-3', cropNames: ['Soyabean'] },
+        { location: 'R-2-4', cropNames: ['Soyabean'] },
+        { location: 'R-2-5', cropNames: ['Soyabean'] },
+      ],
+    });
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.success, true);
+    assert.equal(createdPackets.length, 5);
+    assert.equal(createdBatches[0].count, 5);
+    assert.equal(createdBatches[0].seedCode, 'SO');
+    assert.equal(createdBatches[0].batchCode, 'R2');
+  });
+
+  it('2. Duplicate with one extra QR at a location', async () => {
+    const res = await post({
+      action: 'duplicate',
+      batchId: VALID_SOURCE_ID,
+      seedCode: 'SO',
+      batchCode: 'R2',
+      count: 6,
+      location: 'R - 2 - 5',
+      batchName: 'Soyabean R-2 (+1 Extra)',
+      rows: [
+        { location: 'R-2-1', cropNames: ['Soyabean'] },
+        { location: 'R-2-2', cropNames: ['Soyabean'] },
+        { location: 'R-2-3', cropNames: ['Soyabean', 'Soyabean Extra 1'] }, // 1 extra here
+        { location: 'R-2-4', cropNames: ['Soyabean'] },
+        { location: 'R-2-5', cropNames: ['Soyabean'] },
+      ],
+    });
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.success, true);
+    assert.equal(createdPackets.length, 6);
+    assert.equal(createdBatches[0].count, 6);
+    assert.equal(createdPackets[2].crop, 'Soyabean');
+    assert.equal(createdPackets[3].crop, 'Soyabean Extra 1');
+  });
+
+  it('3. Duplicate with multiple extra QRs at one location', async () => {
+    const res = await post({
+      action: 'duplicate',
+      batchId: VALID_SOURCE_ID,
+      seedCode: 'SO',
+      batchCode: 'R2',
+      count: 7,
+      location: 'R - 2 - 5',
+      batchName: 'Soyabean R-2 (+2 Extra)',
+      rows: [
+        { location: 'R-2-1', cropNames: ['Soyabean'] },
+        { location: 'R-2-2', cropNames: ['Soyabean'] },
+        { location: 'R-2-3', cropNames: ['Soyabean', 'Extra A', 'Extra B'] }, // 2 extra here (total 3)
+        { location: 'R-2-4', cropNames: ['Soyabean'] },
+        { location: 'R-2-5', cropNames: ['Soyabean'] },
+      ],
+    });
+
+    assert.equal(res.statusCode, 201);
+    assert.equal(res.body.success, true);
+    assert.equal(createdPackets.length, 7);
+    assert.equal(createdBatches[0].count, 7);
+    assert.equal(createdPackets[3].crop, 'Extra A');
+    assert.equal(createdPackets[4].crop, 'Extra B');
+    assert.equal(createdPackets[3].locationCode, 'R - 2 - 3');
+    assert.equal(createdPackets[4].locationCode, 'R - 2 - 3');
+  });
 });

@@ -139,9 +139,9 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
     const baseUrl = resolveQrBaseUrl();
 
     // Check if this is a duplicate batch action with location-wise QR generation
-    if (req.body.batchId && req.body.action === 'duplicate') {
-      const batchId = req.body.batchId;
-      if (!mongoose.Types.ObjectId.isValid(batchId)) {
+    if (req.body.action === 'duplicate' || (req.body.batchId && req.body.action === 'duplicate')) {
+      const batchId = req.body.batchId || req.body.id || req.body.sourceBatchId;
+      if (!batchId || !mongoose.Types.ObjectId.isValid(batchId)) {
         return res.status(400).json({ success: false, message: 'Invalid batch ID' });
       }
 
@@ -181,6 +181,14 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
         return res.status(400).json({ success: false, message: 'Total QR count must be between 1 and 5000' });
       }
 
+      const seedCode = (req.body.seedCode || sourceBatch.seedCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const batchCode = (req.body.batchCode || sourceBatch.batchCode || '').toUpperCase().replace(/[^A-Za-z0-9]/g, '');
+      const count = req.body.count ? parseInt(req.body.count, 10) : totalCount;
+
+      if (!seedCode || !batchCode || !count || isNaN(count)) {
+        return res.status(400).json({ success: false, message: 'seedCode, batchCode, count required' });
+      }
+
       const usedUniqueIds = new Set();
       const packetDefs = [];
 
@@ -189,11 +197,11 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
         const parsed = parseLocationString(locStr) || { land: 'R', line: '1', count: 1 };
         const land = parsed.land || (sourceBatch.locationCode ? sourceBatch.locationCode.split('-')[0]?.trim() : 'R') || 'R';
         const line = parsed.line || (sourceBatch.locationCode ? sourceBatch.locationCode.split('-')[1]?.trim() : '1') || '1';
-        const bc = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || sourceBatch.batchCode || 'B1';
+        const bc = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || batchCode || sourceBatch.batchCode || 'B1';
 
         for (let cIdx = 0; cIdx < row.cropNames.length; cIdx++) {
           const cropName = row.cropNames[cIdx].trim();
-          const sc = sourceBatch.seedCode || getSeedCodeForCrop(cropName) || 'SC';
+          const sc = sourceBatch.seedCode || seedCode || getSeedCodeForCrop(cropName) || 'SC';
 
           const prefix = `PRD-${sc}${bc}-`;
           const existingPackets = await SeedPacket.find(
@@ -249,24 +257,24 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
       }
 
       const firstRow = rows[0];
-      const firstCrop = firstRow?.cropNames[0]?.trim() || sourceBatch.seedType;
+      const firstCrop = firstRow?.cropNames[0]?.trim() || req.body.cropName || sourceBatch.seedType;
       const finalBatchName = (batchName && batchName.trim()) || `${sourceBatch.batchName} (Duplicate)`;
 
       const newBatch = await SeedBatch.create({
         batchName: finalBatchName,
         seedType: firstCrop,
-        seedCategory: sourceBatch.seedCategory || '',
-        seedCode: sourceBatch.seedCode,
-        batchNumber: sourceBatch.batchNumber,
-        batchCode: sourceBatch.batchCode,
+        seedCategory: sourceBatch.seedCategory || req.body.seedCategory || '',
+        seedCode: seedCode || sourceBatch.seedCode,
+        batchNumber: sourceBatch.batchNumber || req.body.batchNumber || 'R-2',
+        batchCode: batchCode || sourceBatch.batchCode,
         count: packetDefs.length,
         crop: firstCrop,
-        locationCode: sourceBatch.locationCode,
+        locationCode: req.body.location || sourceBatch.locationCode || (rows[0] ? rows[0].location : ''),
         month: sourceBatch.month,
         year: sourceBatch.year,
-        warehouse: sourceBatch.warehouse || '',
-        rack: sourceBatch.rack || '',
-        shelf: sourceBatch.shelf || '',
+        warehouse: sourceBatch.warehouse || req.body.warehouse || '',
+        rack: sourceBatch.rack || req.body.rack || '',
+        shelf: sourceBatch.shelf || req.body.shelf || '',
         previousYear: sourceBatch.previousYear,
         previousLocationCode: sourceBatch.previousLocationCode,
         gene: sourceBatch.gene,
@@ -276,9 +284,9 @@ router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) =>
           crop: r.cropNames.join(', '),
           seedType: r.cropNames[0],
           seedCategory: sourceBatch.seedCategory || '',
-          seedCode: sourceBatch.seedCode,
+          seedCode: seedCode || sourceBatch.seedCode,
           batchNumber: sourceBatch.batchNumber,
-          batchCode: sourceBatch.batchCode,
+          batchCode: batchCode || sourceBatch.batchCode,
           count: r.cropNames.length,
           locationCode: r.location,
           year: sourceBatch.year,

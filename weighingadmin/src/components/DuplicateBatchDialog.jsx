@@ -17,6 +17,40 @@ function normalizeLocationCode(loc) {
   return loc.replace(/\s+/g, '').toUpperCase();
 }
 
+const SEED_PRESETS = [
+  { label: 'Soyabean',  code: 'SO' },
+  { label: 'Wheat',     code: 'WH' },
+  { label: 'Rice',      code: 'RI' },
+  { label: 'Maize',     code: 'MA' },
+  { label: 'Cotton',    code: 'CO' },
+  { label: 'Mustard',   code: 'MU' },
+  { label: 'Groundnut', code: 'GN' },
+  { label: 'Sunflower', code: 'SF' },
+];
+
+function getSeedCodeForCrop(cropName) {
+  if (!cropName || typeof cropName !== 'string') return 'SC';
+  const trimmed = cropName.trim().toLowerCase();
+  const found = SEED_PRESETS.find(p => p.label.toLowerCase() === trimmed);
+  if (found) return found.code;
+  const letters = cropName.replace(/[^A-Za-z]/g, '');
+  return letters.slice(0, 2).toUpperCase() || 'SC';
+}
+
+function parseLocationString(loc) {
+  if (!loc || typeof loc !== 'string') return null;
+  const parts = loc.split(/\s*-\s*/).map(s => s.trim()).filter(Boolean);
+  if (parts.length === 3) {
+    const land = parts[0];
+    const line = parts[1];
+    const count = parseInt(parts[2], 10);
+    if (land && line && !isNaN(count) && count > 0) {
+      return { land, line, count };
+    }
+  }
+  return null;
+}
+
 function formatLocationDisplay(loc) {
   if (!loc || typeof loc !== 'string') return '';
   const parts = loc.split(/\s*-\s*/).map(s => s.trim()).filter(Boolean);
@@ -225,12 +259,79 @@ export default function DuplicateBatchDialog({ open, batchId, onClose, onSuccess
     try {
       setGenerating(true);
 
+      // 1. Resolve seedCode (never undefined, null or empty)
+      let sc = (batch?.seedCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (!sc && rows[0]?.cropNames[0]) {
+        sc = getSeedCodeForCrop(rows[0].cropNames[0]);
+      }
+      if (!sc) sc = 'SC';
+
+      // 2. Resolve batchCode (never undefined, null or empty)
+      let bc = (batch?.batchCode || '').toUpperCase().replace(/[^A-Za-z0-9]/g, '');
+      if (!bc && rows[0]?.location) {
+        const p = parseLocationString(rows[0].location);
+        if (p) bc = `${p.land}${p.line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      }
+      if (!bc) bc = 'B1';
+
+      // 3. Count is the actual number of new QR codes being generated (not existing)
+      const count = totalQrs;
+
+      // 4. Location code
+      const loc = (batch?.locationCode || (rows[0]?.location ? formatLocationDisplay(rows[0].location) : 'R-1-1')).trim();
+
+      // 5. Crop name
+      const firstCrop = (rows[0]?.cropNames[0] || batch?.seedType || batch?.crop || 'Crop').trim();
+
+      // Multi-seed entries array for full backend compatibility
+      const entries = [];
+      rows.forEach(r => {
+        const locStr = r.location;
+        const parsed = parseLocationString(locStr) || { land: 'R', line: '1', count: 1 };
+        const land = parsed.land || (batch?.locationCode ? batch.locationCode.split('-')[0]?.trim() : 'R') || 'R';
+        const line = parsed.line || (batch?.locationCode ? batch.locationCode.split('-')[1]?.trim() : '1') || '1';
+        const rowBc = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || bc;
+
+        r.cropNames.forEach((cn, cIdx) => {
+          const entryCrop = cn.trim();
+          const entrySc = batch?.seedCode || getSeedCodeForCrop(entryCrop) || sc;
+          entries.push({
+            cropName: entryCrop,
+            crop: entryCrop,
+            seedType: entryCrop,
+            seedCategory: batch?.seedCategory || '',
+            seedCode: entrySc,
+            batchNumber: batch?.batchNumber || `${land}-${line}`,
+            batchCode: rowBc,
+            count: 1,
+            srNo: parsed.count != null ? parsed.count : (cIdx + 1),
+            land,
+            line,
+            location: locStr,
+            locationCode: locStr,
+          });
+        });
+      });
+
       const payload = {
+        batchId,
+        action: 'duplicate',
+        seedCode: sc,
+        batchCode: bc,
+        count,
+        location: loc,
+        cropName: firstCrop,
+        crop: firstCrop,
+        seedType: firstCrop,
+        batchNumber: batch?.batchNumber || 'R-2',
         batchName: batchName.trim(),
         rows: rows.map(r => ({
           location: r.location,
           cropNames: r.cropNames.map(cn => cn.trim()),
+          generated: r.generated,
+          extra: r.extra,
         })),
+        entries,
       };
 
       const res = await batchAPI.duplicate(batchId, payload);
