@@ -27,6 +27,26 @@ function parseLocationString(loc) {
 
 const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const SEED_PRESETS = [
+  { label: 'Soyabean',  code: 'SO' },
+  { label: 'Wheat',     code: 'WH' },
+  { label: 'Rice',      code: 'RI' },
+  { label: 'Maize',     code: 'MA' },
+  { label: 'Cotton',    code: 'CO' },
+  { label: 'Mustard',   code: 'MU' },
+  { label: 'Groundnut', code: 'GN' },
+  { label: 'Sunflower', code: 'SF' },
+];
+
+function getSeedCodeForCrop(cropName) {
+  if (!cropName || typeof cropName !== 'string') return '';
+  const trimmed = cropName.trim().toLowerCase();
+  const found = SEED_PRESETS.find(p => p.label.toLowerCase() === trimmed);
+  if (found) return found.code;
+  const letters = cropName.replace(/[^A-Za-z]/g, '');
+  return letters.slice(0, 2).toUpperCase();
+}
+
 async function checkPacketExists(uniqueId) {
   if (mongoose.connection.readyState !== 1 && SeedPacket.exists === mongoose.Model.exists) {
     return false;
@@ -117,6 +137,202 @@ function resolveQrBaseUrl() {
 router.post('/', protect, allowRoles('superadmin', 'admin'), async (req, res) => {
   try {
     const baseUrl = resolveQrBaseUrl();
+
+    // Check if this is a duplicate batch action with location-wise QR generation
+    if (req.body.batchId && req.body.action === 'duplicate') {
+      const batchId = req.body.batchId;
+      if (!mongoose.Types.ObjectId.isValid(batchId)) {
+        return res.status(400).json({ success: false, message: 'Invalid batch ID' });
+      }
+
+      const sourceBatch = await SeedBatch.findById(batchId);
+      if (!sourceBatch) {
+        return res.status(404).json({ success: false, message: 'Source batch not found' });
+      }
+
+      const { batchName, rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ success: false, message: 'No location rows provided for duplication' });
+      }
+
+      // Validation: check each row and crop name
+      for (let rIdx = 0; rIdx < rows.length; rIdx++) {
+        const row = rows[rIdx];
+        const loc = (row.location || '').trim();
+        if (!loc) {
+          return res.status(400).json({ success: false, message: `Row #${rIdx + 1}: Location is required` });
+        }
+        if (!Array.isArray(row.cropNames) || row.cropNames.length === 0) {
+          return res.status(400).json({ success: false, message: `Location ${loc}: At least one crop name entry is required` });
+        }
+        for (let cIdx = 0; cIdx < row.cropNames.length; cIdx++) {
+          const cn = (row.cropNames[cIdx] || '').trim();
+          if (!cn) {
+            return res.status(400).json({
+              success: false,
+              message: `Crop name is mandatory for every entry (Location: ${loc}, Entry #${cIdx + 1})`,
+            });
+          }
+        }
+      }
+
+      const totalCount = rows.reduce((sum, r) => sum + r.cropNames.length, 0);
+      if (totalCount < 1 || totalCount > 5000) {
+        return res.status(400).json({ success: false, message: 'Total QR count must be between 1 and 5000' });
+      }
+
+      const usedUniqueIds = new Set();
+      const packetDefs = [];
+
+      for (const row of rows) {
+        const locStr = row.location.trim();
+        const parsed = parseLocationString(locStr) || { land: 'R', line: '1', count: 1 };
+        const land = parsed.land || (sourceBatch.locationCode ? sourceBatch.locationCode.split('-')[0]?.trim() : 'R') || 'R';
+        const line = parsed.line || (sourceBatch.locationCode ? sourceBatch.locationCode.split('-')[1]?.trim() : '1') || '1';
+        const bc = `${land}${line}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase() || sourceBatch.batchCode || 'B1';
+
+        for (let cIdx = 0; cIdx < row.cropNames.length; cIdx++) {
+          const cropName = row.cropNames[cIdx].trim();
+          const sc = sourceBatch.seedCode || getSeedCodeForCrop(cropName) || 'SC';
+
+          const prefix = `PRD-${sc}${bc}-`;
+          const existingPackets = await SeedPacket.find(
+            { uniqueId: new RegExp(`^${escapeRegex(prefix)}`) },
+            'uniqueId serialNumber'
+          ).lean();
+
+          let maxSerial = 0;
+          for (const p of existingPackets) {
+            if (typeof p.serialNumber === 'number' && Number.isFinite(p.serialNumber) && p.serialNumber > maxSerial) {
+              maxSerial = p.serialNumber;
+            }
+            if (p.uniqueId) {
+              const m = p.uniqueId.match(/-(\d+)$/);
+              if (m) {
+                const num = parseInt(m[1], 10);
+                if (!isNaN(num) && num > maxSerial) maxSerial = num;
+              }
+            }
+          }
+          for (const p of packetDefs) {
+            if (p.uniqueId && p.uniqueId.startsWith(prefix)) {
+              const m = p.uniqueId.match(/-(\d+)$/);
+              if (m) {
+                const num = parseInt(m[1], 10);
+                if (!isNaN(num) && num > maxSerial) maxSerial = num;
+              }
+            }
+          }
+
+          let seq = maxSerial + 1;
+          let uniqueId = `${prefix}${String(seq).padStart(3, '0')}`;
+          while (usedUniqueIds.has(uniqueId) || await checkPacketExists(uniqueId)) {
+            seq++;
+            uniqueId = `${prefix}${String(seq).padStart(3, '0')}`;
+          }
+          usedUniqueIds.add(uniqueId);
+
+          const locationCode = parsed.count != null
+            ? `${land} - ${line} - ${parsed.count}`
+            : locStr;
+
+          packetDefs.push({
+            uniqueId,
+            fileName: `${uniqueId}.png`,
+            crop: cropName,
+            seedType: cropName,
+            seedCode: sc,
+            locationCode,
+            serialNumber: parsed.count != null ? parsed.count : seq,
+          });
+        }
+      }
+
+      const firstRow = rows[0];
+      const firstCrop = firstRow?.cropNames[0]?.trim() || sourceBatch.seedType;
+      const finalBatchName = (batchName && batchName.trim()) || `${sourceBatch.batchName} (Duplicate)`;
+
+      const newBatch = await SeedBatch.create({
+        batchName: finalBatchName,
+        seedType: firstCrop,
+        seedCategory: sourceBatch.seedCategory || '',
+        seedCode: sourceBatch.seedCode,
+        batchNumber: sourceBatch.batchNumber,
+        batchCode: sourceBatch.batchCode,
+        count: packetDefs.length,
+        crop: firstCrop,
+        locationCode: sourceBatch.locationCode,
+        month: sourceBatch.month,
+        year: sourceBatch.year,
+        warehouse: sourceBatch.warehouse || '',
+        rack: sourceBatch.rack || '',
+        shelf: sourceBatch.shelf || '',
+        previousYear: sourceBatch.previousYear,
+        previousLocationCode: sourceBatch.previousLocationCode,
+        gene: sourceBatch.gene,
+        comments: sourceBatch.comments,
+        createdBy: req.admin._id,
+        seeds: rows.map(r => ({
+          crop: r.cropNames.join(', '),
+          seedType: r.cropNames[0],
+          seedCategory: sourceBatch.seedCategory || '',
+          seedCode: sourceBatch.seedCode,
+          batchNumber: sourceBatch.batchNumber,
+          batchCode: sourceBatch.batchCode,
+          count: r.cropNames.length,
+          locationCode: r.location,
+          year: sourceBatch.year,
+          previousYear: sourceBatch.previousYear,
+          previousLocationCode: sourceBatch.previousLocationCode,
+          gene: sourceBatch.gene,
+          comments: sourceBatch.comments,
+        })),
+      });
+
+      const uploadedFileIds = [];
+      try {
+        await Promise.all(packetDefs.map(async (def) => {
+          const buffer = await QRCode.toBuffer(`${baseUrl}/scan/${def.uniqueId}`, {
+            type: 'png',
+            width: 400,
+            margin: 2,
+            color: { dark: '#1a227f', light: '#ffffff' },
+          });
+          def.fileId = await uploadQrPng(buffer, def.fileName, {
+            uniqueId: def.uniqueId,
+            batchId: String(newBatch._id),
+          });
+          uploadedFileIds.push(def.fileId);
+        }));
+
+        const packetsToInsert = packetDefs.map(def => ({
+          uniqueId: def.uniqueId,
+          batchId: newBatch._id,
+          qrCodeUrl: `/api/qr/${def.fileId}`,
+          status: 'empty',
+          crop: def.crop,
+          seedType: def.seedType,
+          seedCode: def.seedCode,
+          locationCode: def.locationCode,
+          serialNumber: def.serialNumber,
+        }));
+
+        const insertedPackets = await SeedPacket.insertMany(packetsToInsert);
+        newBatch.packets = insertedPackets.map(p => p._id);
+        await newBatch.save();
+
+        return res.status(201).json({
+          success: true,
+          message: `Successfully generated ${insertedPackets.length} duplicate QR codes`,
+          batch: newBatch,
+          packets: insertedPackets,
+        });
+      } catch (uploadErr) {
+        await Promise.all(uploadedFileIds.map(id => deleteQrFile(id)));
+        await SeedBatch.findByIdAndDelete(newBatch._id);
+        throw uploadErr;
+      }
+    }
 
     // Check if this is an extra-qrs update on an existing batch
     if (req.body.batchId && (req.body.action === 'extra-qrs' || req.body.existingEntriesUpdates || req.body.newEntries)) {
@@ -919,5 +1135,7 @@ router.get('/:id', protect, async (req, res) => {
     sendServerError(res, err, 'batchRoutes');
   }
 });
+
+module.exports = router;
 
 module.exports = router;

@@ -18,10 +18,12 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SearchIcon from '@mui/icons-material/Search';
 import ImageIcon from '@mui/icons-material/Image';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import NewBatchDialog from '../components/NewBatchDialog';
 import EditBatchDialog from '../components/EditBatchDialog';
+import DuplicateBatchDialog from '../components/DuplicateBatchDialog';
 import { BATCH_DETAIL_FIELDS } from '../components/batchDetailFields';
 import { batchAPI } from '../services/api';
 
@@ -64,6 +66,7 @@ export default function Batches() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError,   setDetailError]   = useState('');
   const [editBatchId,   setEditBatchId]   = useState(null);
+  const [duplicateBatchId, setDuplicateBatchId] = useState(null);
   const [packetSearch,  setPacketSearch]  = useState('');
   const [viewPhoto,     setViewPhoto]     = useState(null); // { url, label } | null
 
@@ -165,9 +168,9 @@ export default function Batches() {
       ctx.textAlign = 'center';
       ctx.fillText(locationCode || '', width / 2, 452);
 
-      // Text 3: Packet ID
-      ctx.fillStyle = '#64748b';
-      ctx.font = '13px "Courier New", Courier, monospace';
+      // Text 3: Packet ID (bold)
+      ctx.fillStyle = '#475569';
+      ctx.font = 'bold 13px "Courier New", Courier, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(uniqueId, width / 2, 485);
 
@@ -321,7 +324,8 @@ export default function Batches() {
             }
             .pkt-id {
               font-size: 10px;
-              color: #64748b;
+              font-weight: 700;
+              color: #475569;
               margin-top: 3px;
               font-family: monospace;
             }
@@ -540,6 +544,15 @@ export default function Batches() {
                       }}>
                       Edit
                     </Button>
+                    <Button variant="outlined" startIcon={<ContentCopyIcon />}
+                      onClick={() => setDuplicateBatchId(b._id)}
+                      sx={{
+                        borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                        borderColor: '#e2e8f0', color: '#1a227f', px: 1.8,
+                        '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
+                      }}>
+                      Duplicate
+                    </Button>
                     <Button variant="outlined" startIcon={<InfoOutlinedIcon />}
                       onClick={() => openDetailDialog(b)}
                       sx={{
@@ -718,6 +731,22 @@ export default function Batches() {
                     }}
                   >
                     Edit Batch
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<ContentCopyIcon />}
+                    onClick={() => {
+                      const id = detailBatch._id;
+                      setDetailBatch(null);
+                      setDuplicateBatchId(id);
+                    }}
+                    sx={{
+                      background: 'rgba(255,255,255,0.2)',
+                      '&:hover': { background: 'rgba(255,255,255,0.3)' },
+                      borderRadius: 2, fontSize: 12, fontWeight: 700
+                    }}
+                  >
+                    Duplicate
                   </Button>
                   <IconButton onClick={() => setDetailBatch(null)} sx={{ color: '#fff' }}>
                     <CloseIcon />
@@ -899,6 +928,16 @@ export default function Batches() {
         onClose={() => setEditBatchId(null)}
         onUpdated={(data) => {
           setSuccessMsg(data?.message || 'Batch updated with extra QR codes successfully');
+          fetchBatches();
+        }}
+      />
+
+      <DuplicateBatchDialog
+        open={Boolean(duplicateBatchId)}
+        batchId={duplicateBatchId}
+        onClose={() => setDuplicateBatchId(null)}
+        onSuccess={(data) => {
+          setSuccessMsg(data?.message || 'Duplicate batch created successfully');
           fetchBatches();
         }}
       />

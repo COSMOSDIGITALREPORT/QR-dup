@@ -17,11 +17,13 @@ import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
 import NewBatchDialog from '../components/NewBatchDialog';
 import EditBatchDialog from '../components/EditBatchDialog';
+import DuplicateBatchDialog from '../components/DuplicateBatchDialog';
 
 function escapeHtml(value) {
   if (value === null || value === undefined) return '';
@@ -92,6 +94,33 @@ export default function Products() {
   const [detailSearch, setDetailSearch] = useState('');
   const [editBatchId, setEditBatchId] = useState(null);
   const [batchSelectDialog, setBatchSelectDialog] = useState(null);
+  const [duplicateBatchId, setDuplicateBatchId] = useState(null);
+  const [duplicateSelectDialog, setDuplicateSelectDialog] = useState(null);
+
+  const handleOpenDuplicateProduct = (group) => {
+    if (!group || !group.records || group.records.length === 0) return;
+    const batchesMap = new Map();
+    group.records.forEach(r => {
+      const bId = r.batchId;
+      if (bId && !batchesMap.has(String(bId))) {
+        batchesMap.set(String(bId), {
+          id: bId,
+          name: r.batchName || r.batch || 'Batch',
+          number: r.batch,
+        });
+      }
+    });
+    const distinct = Array.from(batchesMap.values());
+    if (distinct.length === 1) {
+      setDuplicateBatchId(distinct[0].id);
+    } else if (distinct.length > 1) {
+      setDuplicateSelectDialog({ groupName: group.name, batches: distinct });
+    } else if (group.records[0]?.batchId) {
+      setDuplicateBatchId(group.records[0].batchId);
+    } else {
+      alert('No batch reference found for this product group.');
+    }
+  };
 
   const handleOpenEditProduct = (group) => {
     if (!group || !group.records || group.records.length === 0) return;
@@ -315,7 +344,6 @@ export default function Products() {
     const cardsHtml = previewLabels.map(lbl => {
       const qrSrc = escapeHtml(`${baseUrl}${lbl.qrCodeUrl}`);
       const cropName = escapeHtml(lbl.crop || lbl.name || printGroup.name);
-      const batchInfo = escapeHtml(lbl.batchName || lbl.batch || lbl.batchCode || '—');
       const locNumber = escapeHtml(lbl.locationCode || lbl.id);
       const idText = escapeHtml(lbl.id);
 
@@ -323,7 +351,6 @@ export default function Products() {
         <div class="label-card">
           <img class="qr-img" src="${qrSrc}" alt="${idText}" />
           <div class="crop-name">${cropName}</div>
-          <div class="batch-name">Batch: ${batchInfo}</div>
           <div class="loc-number">${locNumber}</div>
           <div class="id-text">${idText}</div>
           ${lbl.totalCopies > 1 ? `<div class="copy-tag">Copy ${lbl.copyIndex} of ${lbl.totalCopies}</div>` : ''}
@@ -368,9 +395,8 @@ export default function Products() {
     }
     .qr-img { width: 130px; height: 130px; object-fit: contain; display: block; }
     .crop-name { font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 6px; line-height: 1.2; }
-    .batch-name { font-size: 11px; font-weight: 600; color: #475569; margin-top: 3px; }
-    .loc-number { font-size: 12px; font-weight: 700; color: #1a227f; font-family: monospace; margin-top: 3px; }
-    .id-text { font-size: 9.5px; color: #94a3b8; font-family: monospace; margin-top: 2px; }
+    .loc-number { font-size: 12px; font-weight: 700; color: #1a227f; font-family: monospace; margin-top: 4px; }
+    .id-text { font-size: 10px; font-weight: 700; color: #475569; font-family: monospace; margin-top: 2px; }
     .copy-tag { font-size: 9px; color: #4338ca; font-weight: 700; margin-top: 3px; background: #e0e7ff; padding: 2px 6px; border-radius: 4px; }
     @media print {
       .no-print { display: none !important; }
@@ -616,6 +642,18 @@ export default function Products() {
                       </Button>
                       <Button
                         variant="outlined"
+                        startIcon={<ContentCopyIcon />}
+                        onClick={() => handleOpenDuplicateProduct(g)}
+                        sx={{
+                          borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                          borderColor: '#e2e8f0', color: '#1a227f', px: 2,
+                          '&:hover': { borderColor: '#1a227f', background: 'rgba(26,34,127,0.04)' },
+                        }}
+                      >
+                        Duplicate
+                      </Button>
+                      <Button
+                        variant="outlined"
                         startIcon={<InfoOutlinedIcon />}
                         onClick={() => { setDetailGroup(g); setDetailSearch(''); }}
                         sx={{
@@ -698,6 +736,14 @@ export default function Products() {
                     sx={{ background: 'rgba(255,255,255,0.2)', '&:hover': { background: 'rgba(255,255,255,0.3)' }, borderRadius: 2, fontSize: 12, fontWeight: 700 }}
                   >
                     Edit Batch
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<ContentCopyIcon />}
+                    onClick={() => { const g = detailGroup; setDetailGroup(null); handleOpenDuplicateProduct(g); }}
+                    sx={{ background: 'rgba(255,255,255,0.2)', '&:hover': { background: 'rgba(255,255,255,0.3)' }, borderRadius: 2, fontSize: 12, fontWeight: 700 }}
+                  >
+                    Duplicate
                   </Button>
                   <Button
                     variant="contained"
@@ -834,6 +880,20 @@ export default function Products() {
                                   sx={{ color: '#1a227f' }}
                                 >
                                   <EditOutlinedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            {r.batchId && (
+                              <Tooltip title="Duplicate this batch">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => {
+                                    setDetailGroup(null);
+                                    setDuplicateBatchId(r.batchId);
+                                  }}
+                                  sx={{ color: '#1a227f' }}
+                                >
+                                  <ContentCopyIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                             )}
@@ -1060,13 +1120,10 @@ export default function Products() {
                             <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0f172a', mt: 0.8, lineHeight: 1.2 }}>
                               {lbl.crop || lbl.name || printGroup.name}
                             </Typography>
-                            <Typography sx={{ fontSize: 11, fontWeight: 600, color: '#475569', mt: 0.3 }}>
-                              Batch: {lbl.batchName || lbl.batch || lbl.batchCode || '—'}
-                            </Typography>
-                            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: '#1a227f', fontFamily: 'monospace', mt: 0.3 }}>
+                            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: '#1a227f', fontFamily: 'monospace', mt: 0.4 }}>
                               {lbl.locationCode || lbl.id}
                             </Typography>
-                            <Typography sx={{ fontSize: 9.5, color: '#94a3b8', fontFamily: 'monospace', mt: 0.2 }}>
+                            <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#475569', fontFamily: 'monospace', mt: 0.2 }}>
                               {lbl.id}
                             </Typography>
                             {lbl.totalCopies > 1 && (
@@ -1144,13 +1201,10 @@ export default function Products() {
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: '#0f172a', mt: 2 }}>
               {previewQr.crop || previewQr.name}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: '#475569', mt: 0.5 }}>
-              Batch: {previewQr.batchName || previewQr.batch || previewQr.batchCode || '—'}
-            </Typography>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f', fontFamily: 'monospace', mt: 0.5 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f', fontFamily: 'monospace', mt: 0.8 }}>
               Location: {previewQr.locationCode || previewQr.id}
             </Typography>
-            <Typography sx={{ fontSize: 11, color: '#94a3b8', fontFamily: 'monospace', mt: 0.5 }}>
+            <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: '#475569', fontFamily: 'monospace', mt: 0.5 }}>
               ID: {previewQr.id}
             </Typography>
             <Button
@@ -1175,7 +1229,18 @@ export default function Products() {
         }}
       />
 
-      {/* Batch Select Dialog for multi-batch product sets */}
+      {/* Duplicate Batch & Location-wise QR Dialog */}
+      <DuplicateBatchDialog
+        open={Boolean(duplicateBatchId)}
+        batchId={duplicateBatchId}
+        onClose={() => setDuplicateBatchId(null)}
+        onSuccess={(data) => {
+          setSuccessMsg(data?.message || 'Duplicate batch created successfully');
+          fetchInventory();
+        }}
+      />
+
+      {/* Batch Select Dialog for multi-batch product sets (Edit) */}
       <Dialog open={Boolean(batchSelectDialog)} onClose={() => setBatchSelectDialog(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, fontSize: 16 }}>Select Batch to Edit</DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
@@ -1206,6 +1271,40 @@ export default function Products() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setBatchSelectDialog(null)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Batch Select Dialog for multi-batch product sets (Duplicate) */}
+      <Dialog open={Boolean(duplicateSelectDialog)} onClose={() => setDuplicateSelectDialog(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: 16 }}>Select Batch to Duplicate</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography sx={{ fontSize: 13, color: '#64748b', mb: 2 }}>
+            This product group contains items from multiple batches. Choose which batch to duplicate:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {duplicateSelectDialog?.batches?.map(b => (
+              <Button
+                key={b.id}
+                variant="outlined"
+                onClick={() => {
+                  const id = b.id;
+                  setDuplicateSelectDialog(null);
+                  setDuplicateBatchId(id);
+                }}
+                sx={{
+                  justifyContent: 'space-between', p: 1.5, textTransform: 'none',
+                  borderRadius: 2, borderColor: '#cbd5e1', color: '#0f172a', fontWeight: 700,
+                  '&:hover': { borderColor: '#1a227f', background: '#f0f4ff' }
+                }}
+              >
+                <span>{b.name}</span>
+                <Chip label="Duplicate" size="small" sx={{ background: '#1a227f', color: '#fff', fontSize: 11, fontWeight: 700 }} />
+              </Button>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDuplicateSelectDialog(null)}>Cancel</Button>
         </DialogActions>
       </Dialog>
 
