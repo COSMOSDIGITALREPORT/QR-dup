@@ -244,21 +244,6 @@ export default function DataManagerScreen({ session, info }) {
           <Button variant="contained" size="small" onClick={() => setAddOpen(true)} data-testid="add-record">Add record</Button>
         )}
         <Button variant="outlined" size="small" onClick={() => run('sync.now')} disabled={status?.state === 'syncing'} data-testid="sync-now">Full Sync</Button>
-        <Box sx={{ flexGrow: 1 }} />
-        <Typography variant="caption" color="text.secondary" noWrap title={info.workbookPath} data-testid="workbook-path">
-          {info.workbookPath}
-        </Typography>
-        <Button size="small" onClick={() => run('workbook.showInFolder')} data-testid="show-workbook">Show in folder</Button>
-        <Button
-          size="small"
-          onClick={async () => {
-            const saved = await run('workbook.saveCopy');
-            if (saved) setToast({ severity: 'success', message: `Copy saved to ${saved}` });
-          }}
-          data-testid="save-copy"
-        >
-          Save a copy
-        </Button>
       </Stack>
 
       <Box sx={{ px: 2 }}>
