@@ -84,6 +84,42 @@ function buildMethods() {
       return filePath;
     },
 
+    'yoy.browse': async () => {
+      const current = core.yoyWorkbookPath;
+      const defaultDir = current && fs.existsSync(path.dirname(current))
+        ? path.dirname(current)
+        : (app.getPath('documents') || process.cwd());
+
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: 'Select Excel Workbook (*.xlsx)',
+        defaultPath: defaultDir,
+        properties: ['openFile'],
+        filters: [
+          { name: 'Excel Workbook (*.xlsx)', extensions: ['xlsx'] },
+          { name: 'All Files (*.*)', extensions: ['*'] },
+        ],
+      });
+
+      if (canceled || !filePaths || filePaths.length === 0) {
+        return { canceled: true };
+      }
+
+      const selected = filePaths[0];
+      if (!selected.toLowerCase().endsWith('.xlsx')) {
+        throw new Error('Please select a valid Excel workbook (.xlsx).');
+      }
+
+      return {
+        canceled: false,
+        filePath: selected,
+        fileName: path.basename(selected),
+        exists: fs.existsSync(selected),
+      };
+    },
+    'yoy.connect': async (filePath) => {
+      if (!filePath) throw new Error('No workbook path selected.');
+      return core.setYoyWorkbookPath(filePath);
+    },
     'yoy.sync': () => core.yoySyncNow(),
     'yoy.open': async () => {
       if (!fs.existsSync(core.yoyWorkbookPath)) {

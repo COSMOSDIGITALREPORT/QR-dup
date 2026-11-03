@@ -26,13 +26,46 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
   const outbox = createOutbox({ filePath: path.join(stateDir, 'outbox.json') });
   const workbook = createWorkbookWriter({ dir: workbookDir });
 
-  const defaultYoy = fs.existsSync('D:\\dapatri argo\\YOY.xlsx')
-    ? 'D:\\dapatri argo\\YOY.xlsx'
-    : (workbookDir ? path.join(workbookDir, 'YOY.xlsx') : path.join(process.cwd(), 'YOY.xlsx'));
-  const yoyWorkbook = createYoyWorkbookWriter({ filePath: defaultYoy });
+  const settingsPath = path.join(dataDir, 'yoy-settings.json');
+  function loadYoySettings() {
+    try {
+      if (fs.existsSync(settingsPath)) {
+        const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        if (data && typeof data.filePath === 'string' && data.filePath.trim()) {
+          return data;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function saveYoySettings(settings) {
+    try {
+      fs.mkdirSync(dataDir, { recursive: true });
+      const tmp = `${settingsPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(settings, null, 2));
+      fs.renameSync(tmp, settingsPath);
+    } catch (_) {}
+  }
+
+  const savedSettings = loadYoySettings();
+  let defaultYoy = '';
+  if (savedSettings && savedSettings.filePath) {
+    defaultYoy = savedSettings.filePath;
+  } else if (fs.existsSync('D:\\dapatri argo\\YOY.xlsx')) {
+    defaultYoy = 'D:\\dapatri argo\\YOY.xlsx';
+  } else if (workbookDir) {
+    defaultYoy = path.join(workbookDir, 'YOY.xlsx');
+  } else {
+    defaultYoy = path.join(process.cwd(), 'YOY.xlsx');
+  }
+
+  let yoyWorkbook = createYoyWorkbookWriter({ filePath: defaultYoy });
 
   const yoyState = {
     filePath: yoyWorkbook.filePath,
+    fileName: path.basename(yoyWorkbook.filePath),
+    exists: fs.existsSync(yoyWorkbook.filePath),
     lastSyncAt: null,
     lastError: null,
     syncing: false,
@@ -42,7 +75,33 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
   };
 
   function getYoyStatus() {
-    return { ...yoyState };
+    return {
+      ...yoyState,
+      filePath: yoyWorkbook.filePath,
+      fileName: path.basename(yoyWorkbook.filePath),
+      exists: fs.existsSync(yoyWorkbook.filePath),
+    };
+  }
+
+  function setYoyWorkbookPath(newPath) {
+    if (!newPath || typeof newPath !== 'string') {
+      throw new Error('Please select a valid Excel workbook path.');
+    }
+    const cleanPath = path.resolve(newPath.trim());
+    if (!cleanPath.toLowerCase().endsWith('.xlsx')) {
+      throw new Error('Selected file must be an Excel workbook (.xlsx).');
+    }
+
+    saveYoySettings({ filePath: cleanPath });
+    yoyWorkbook = createYoyWorkbookWriter({ filePath: cleanPath });
+
+    yoyState.filePath = cleanPath;
+    yoyState.fileName = path.basename(cleanPath);
+    yoyState.exists = fs.existsSync(cleanPath);
+    yoyState.lastError = null;
+
+    emitData();
+    return getYoyStatus();
   }
 
   async function syncYoyWorkbook() {
@@ -60,6 +119,7 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
         yoyState.inserted = result.inserted;
         yoyState.updated = result.updated;
         yoyState.lastError = null;
+        yoyState.exists = true;
       }
     } catch (err) {
       yoyState.lastError = err && err.message ? err.message : 'YOY workbook sync failed';
@@ -128,12 +188,13 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
   return {
     apiUrl,
     workbookPath: workbook.filePath,
-    yoyWorkbookPath: yoyWorkbook.filePath,
+    get yoyWorkbookPath() { return yoyWorkbook.filePath; },
     getColumns: () => ({ columns: COLUMNS, hidden: HIDDEN_COLUMNS, packetDerived: PACKET_DERIVED_FIELDS }),
     getSession: () => auth.getSession(),
     getRows,
     getStatus: () => ({ ...engine.getStatus(), yoy: getYoyStatus() }),
     getYoyStatus,
+    setYoyWorkbookPath,
     yoySyncNow: () => syncYoyWorkbook(),
     friendly,
 
