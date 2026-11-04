@@ -64,6 +64,72 @@ describe('WEIGHINGQR DELETION & CROSS-PLATFORM SYNCHRONIZATION VERIFICATION', ()
       const prevGroupLayer = productRoutes.stack.find(l => l.route && l.route.path === '/group/delete-preview' && l.route.methods.get);
       assert.ok(prevGroupLayer, 'GET /group/delete-preview route exists on productRoutes');
       assert.equal(prevGroupLayer.route.stack.length, 2, 'Stack has allowRoles(superadmin) and previewProductGroup');
+
+      const prevDirectLayer = productRoutes.stack.find(l => l.route && l.route.path === '/delete-preview' && l.route.methods.get);
+      assert.ok(prevDirectLayer, 'GET /delete-preview route exists on productRoutes');
+
+      const delDirectLayer = productRoutes.stack.find(l => l.route && l.route.path === '/:id' && l.route.methods.delete);
+      assert.ok(delDirectLayer, 'DELETE /:id route exists on productRoutes');
+    });
+
+    it('Verifies DELETE /api/products/group/Mustard and URL-encoded DELETE /api/products/group/Mustard%20Seed execute successfully', async () => {
+      const express = require('express');
+      const app = express();
+      freshRequireCache('../routes/productRoutes');
+      const productRoutes = require('../routes/productRoutes');
+      app.use('/api/products', productRoutes);
+      app.use((req, res) => res.status(404).json({ message: `Route ${req.originalUrl} not found` }));
+
+      // Mock preview and cascade deletion
+      const origPreview = deletionService.previewProductDeletion;
+      const origCascade = deletionService.deleteProductCascade;
+
+      deletionService.previewProductDeletion = async (name) => ({
+        productName: name,
+        associatedBatchesCount: 1,
+        associatedQrsCount: 5,
+      });
+
+      deletionService.deleteProductCascade = async (name, adminId) => ({
+        productName: name,
+        deletedCounts: { batches: 1, packets: 5 },
+      });
+
+      try {
+        // 1. Preview GET /api/products/group/delete-preview?name=Mustard
+        const reqPrev = { method: 'GET', url: '/api/products/group/delete-preview?name=Mustard', headers: authHeaderFor(superadminId) };
+        const resPrev = mockRes();
+        await new Promise(r => { resPrev.on('finish', r); app.handle(reqPrev, resPrev); });
+        assert.equal(resPrev.statusCode, 200);
+        assert.equal(resPrev.body.success, true);
+        assert.equal(resPrev.body.preview.productName, 'Mustard');
+
+        // 2. DELETE /api/products/group/Mustard
+        const reqDel1 = { method: 'DELETE', url: '/api/products/group/Mustard', headers: authHeaderFor(superadminId) };
+        const resDel1 = mockRes();
+        await new Promise(r => { resDel1.on('finish', r); app.handle(reqDel1, resDel1); });
+        assert.equal(resDel1.statusCode, 200, 'DELETE /api/products/group/Mustard returns 200');
+        assert.equal(resDel1.body.success, true);
+        assert.equal(resDel1.body.result.productName, 'Mustard');
+
+        // 3. DELETE /api/products/group/Mustard%20Seed (URL-encoded)
+        const reqDel2 = { method: 'DELETE', url: '/api/products/group/Mustard%20Seed', headers: authHeaderFor(superadminId) };
+        const resDel2 = mockRes();
+        await new Promise(r => { resDel2.on('finish', r); app.handle(reqDel2, resDel2); });
+        assert.equal(resDel2.statusCode, 200, 'DELETE /api/products/group/Mustard%20Seed returns 200');
+        assert.equal(resDel2.body.success, true);
+        assert.equal(resDel2.body.result.productName, 'Mustard Seed');
+
+        // 4. Fallback direct DELETE /api/products/Mustard (via /:id)
+        const reqDel3 = { method: 'DELETE', url: '/api/products/Mustard', headers: authHeaderFor(superadminId) };
+        const resDel3 = mockRes();
+        await new Promise(r => { resDel3.on('finish', r); app.handle(reqDel3, resDel3); });
+        assert.equal(resDel3.statusCode, 200, 'DELETE /api/products/Mustard returns 200');
+        assert.equal(resDel3.body.success, true);
+      } finally {
+        deletionService.previewProductDeletion = origPreview;
+        deletionService.deleteProductCascade = origCascade;
+      }
     });
   });
 

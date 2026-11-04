@@ -1,9 +1,10 @@
 const path = require('path');
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const generateQR = require('../utils/generateQR');
 const { streamQrFile } = require('../utils/qrStorage');
 const { sendServerError } = require('../utils/errorResponse');
-const { previewProductDeletion, deleteProductCascade } = require('../utils/deletionService');
+const deletionService = require('../utils/deletionService');
 
 // Matches the new GridFS-backed qrCodeUrl format (/api/qr/<fileId>). Older
 // products predate GridFS and still carry a /uploads/qr/... filesystem path
@@ -129,14 +130,15 @@ const updateProduct = async (req, res) => {
   }
 };
 
-// GET /api/products/group/delete-preview?name=...
+// GET /api/products/group/delete-preview?name=... or GET /api/products/delete-preview?name=...
 const previewProductGroup = async (req, res) => {
   try {
-    const name = req.query.name;
-    if (!name || !name.trim()) {
+    const rawName = req.query.name || req.params.name || '';
+    const name = decodeURIComponent(rawName).trim();
+    if (!name) {
       return res.status(400).json({ success: false, message: 'Product name is required' });
     }
-    const preview = await previewProductDeletion(name);
+    const preview = await deletionService.previewProductDeletion(name);
     if (!preview) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -149,11 +151,12 @@ const previewProductGroup = async (req, res) => {
 // DELETE /api/products/group/:name
 const deleteProductGroup = async (req, res) => {
   try {
-    const name = decodeURIComponent(req.params.name);
-    if (!name || !name.trim()) {
+    const rawName = req.params.name || req.params.id || req.body?.name || req.query?.name || '';
+    const name = decodeURIComponent(rawName).trim();
+    if (!name) {
       return res.status(400).json({ success: false, message: 'Product name is required' });
     }
-    const result = await deleteProductCascade(name, req.admin?._id);
+    const result = await deletionService.deleteProductCascade(name, req.admin?._id);
     if (!result) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -167,16 +170,35 @@ const deleteProductGroup = async (req, res) => {
   }
 };
 
-// DELETE /api/products/:id — superadmin only
+// DELETE /api/products/:id — superadmin only (supports both ObjectId and Product Group Name)
 const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    const result = await deleteProductCascade(product.productName || product.productId, req.admin?._id);
-    await Product.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: 'Product deleted', result });
+    const rawName = req.params.id || '';
+    const name = decodeURIComponent(rawName).trim();
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Product identifier is required' });
+    }
+
+    let targetName = name;
+    if (mongoose.Types.ObjectId.isValid(name)) {
+      const prod = await Product.findById(name);
+      if (prod) {
+        targetName = prod.productName || prod.productId || name;
+        await Product.findByIdAndDelete(name);
+      }
+    }
+
+    const result = await deletionService.deleteProductCascade(targetName, req.admin?._id);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({
+      success: true,
+      message: 'Product deleted permanently',
+      result,
+    });
   } catch (err) {
-    sendServerError(res, err, 'productController');
+    sendServerError(res, err, 'productController:deleteProduct');
   }
 };
 

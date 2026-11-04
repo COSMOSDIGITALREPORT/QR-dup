@@ -17,6 +17,7 @@ const upload = require('../middleware/uploadMiddleware');
 router.use(protect);
 
 router.get('/group/delete-preview', allowRoles('superadmin'), previewProductGroup);
+router.get('/delete-preview',       allowRoles('superadmin'), previewProductGroup);
 router.delete('/group/:name',       allowRoles('superadmin'), deleteProductGroup);
 
 router.post('/', allowRoles('superadmin', 'admin'), upload.single('image'), createProduct);
