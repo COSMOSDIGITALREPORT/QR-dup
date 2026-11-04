@@ -145,7 +145,7 @@ export default function LoginScreen({ onSignedIn, serverUrl, version }) {
   return (
     <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 3 }}>
       <Paper elevation={3} sx={{ width: '100%', maxWidth: 440, p: 4 }} data-testid="login-screen">
-        <Typography variant="h5" fontWeight={700} gutterBottom>Seed Management</Typography>
+        <Typography variant="h5" fontWeight={700} gutterBottom>WeighingQR</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Sign in with your Admin account to open the Excel Data Manager.
         </Typography>

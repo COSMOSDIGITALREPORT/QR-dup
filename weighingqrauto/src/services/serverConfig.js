@@ -30,7 +30,7 @@ const STORAGE_KEY = '@server_url';
 // development against a local backend still works if this default is ever
 // unreachable — no discovery/LAN-scanning logic changed to make this work.
 const DEFAULT_URLS = [
-  'https://weighingqrauto-backend.onrender.com', // Production Render backend (QA target)
+  'https://qr-dup.onrender.com', // Production Render backend
   'http://10.0.2.2:5001',   // Android emulator -> host loopback
   'http://localhost:5001',  // iOS simulator / same-device dev server
 ];

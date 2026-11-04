@@ -58,7 +58,7 @@ export default function HistoryScreen() {
         </View>
         <View style={styles.recordRight}>
           <Text style={[styles.recordWeight, {color: iconColor}]}>
-            {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} kg` : (skippedNote(item) || '—')}
+            {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(3)} kg` : (skippedNote(item) || '—')}
           </Text>
           <Text style={styles.recordTime}>
             {item.afterTime ? new Date(item.afterTime).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}
@@ -97,7 +97,7 @@ export default function HistoryScreen() {
         <View style={styles.summaryDivider} />
         <View style={styles.summaryRight}>
           <Text style={styles.summaryLbl}>AVG DIFFERENCE</Text>
-          <Text style={styles.summaryVal}>{avgDiff == null ? '—' : `${avgDiff >= 0 ? '+' : ''}${avgDiff.toFixed(2)} kg`}</Text>
+          <Text style={styles.summaryVal}>{avgDiff == null ? '—' : `${avgDiff >= 0 ? '+' : ''}${avgDiff.toFixed(3)} kg`}</Text>
         </View>
       </View>
 

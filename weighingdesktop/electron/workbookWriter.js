@@ -62,7 +62,18 @@ function createWorkbookWriter({ dir }) {
     ];
     sheet.getRow(1).font = { bold: true };
 
-    for (const values of rows) sheet.addRow(values);
+    const beforeColIdx = COLUMNS.findIndex((c) => c.field === 'weight') + 1;
+    const afterColIdx = COLUMNS.findIndex((c) => c.field === 'afterWeight') + 1;
+
+    for (const values of rows) {
+      const addedRow = sheet.addRow(values);
+      if (beforeColIdx > 0 && typeof addedRow.getCell(beforeColIdx).value === 'number') {
+        addedRow.getCell(beforeColIdx).numFmt = '0.000';
+      }
+      if (afterColIdx > 0 && typeof addedRow.getCell(afterColIdx).value === 'number') {
+        addedRow.getCell(afterColIdx).numFmt = '0.000';
+      }
+    }
 
     sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUMNS.length } };
 

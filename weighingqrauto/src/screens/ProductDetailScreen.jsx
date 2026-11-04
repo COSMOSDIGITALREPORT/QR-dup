@@ -189,7 +189,7 @@ export default function ProductDetailScreen() {
               <View style={[styles.weightBox, {borderRightWidth: 0}]}>
                 <Icon name="calculate" size={18} color={COLORS.success} />
                 <Text style={[styles.weightVal, {color: COLORS.success}]}>
-                  {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(2)}` : '—'}
+                  {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(3)}` : '—'}
                 </Text>
                 <Text style={styles.weightLbl}>Diff (kg)</Text>
               </View>

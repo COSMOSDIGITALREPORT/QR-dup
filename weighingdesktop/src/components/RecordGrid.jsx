@@ -68,8 +68,14 @@ export default function RecordGrid({ rows, columns, packetDerived, canManage, lo
       type: type === 'number' ? 'number' : 'string',
       width: Math.max(header.length * 9 + 48, type === 'number' ? 110 : 150),
       editable: canManage,
-      // Plain values, as they will appear in Excel (no thousands separators).
-      valueFormatter: (value) => (value === null || value === undefined ? '' : String(value)),
+      // Plain values, as they will appear in Excel (no thousands separators, 3-decimal precision for weights).
+      valueFormatter: (value) => {
+        if (value === null || value === undefined) return '';
+        if ((field === 'weight' || field === 'afterWeight') && typeof value === 'number') {
+          return value.toFixed(3);
+        }
+        return String(value);
+      },
     }));
 
     return [statusColumn, ...dataColumns];

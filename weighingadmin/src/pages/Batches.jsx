@@ -26,6 +26,7 @@ import EditBatchDialog from '../components/EditBatchDialog';
 import DuplicateBatchDialog from '../components/DuplicateBatchDialog';
 import { BATCH_DETAIL_FIELDS } from '../components/batchDetailFields';
 import { batchAPI } from '../services/api';
+import { formatWeight } from '../utils/format';
 
 // Same hardcoded API host already used elsewhere in this app for resolving
 // relative/local paths — a real Cloudinary URL is already absolute and must
@@ -870,8 +871,8 @@ export default function Batches() {
                                     <Chip label={p.status === 'filled' ? 'Filled' : 'Empty'} size="small"
                                       sx={{ fontSize: 10, fontWeight: 800, background: p.status === 'filled' ? '#f0fdf4' : '#f8fafc', color: p.status === 'filled' ? '#15803d' : '#64748b' }} />
                                   </TableCell>
-                                  <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{p.beforeWeight != null ? `${p.beforeWeight} kg` : '—'}</TableCell>
-                                  <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{p.afterWeight != null ? `${p.afterWeight} kg` : '—'}</TableCell>
+                                  <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{formatWeight(p.beforeWeight)}</TableCell>
+                                  <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>{formatWeight(p.afterWeight)}</TableCell>
                                   <TableCell>
                                     <Button size="small" disabled={!beforeUrl} onClick={() => setViewPhoto({ url: beforeUrl, label: 'Before Photo' })}
                                       startIcon={<ImageIcon sx={{ fontSize: '14px !important' }} />}

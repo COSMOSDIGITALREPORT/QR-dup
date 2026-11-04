@@ -2,7 +2,7 @@
   "name": "weighingdesktop",
   "version": "0.1.1",
   "private": true,
-  "description": "Seed Management desktop app — Login/Sign Up and the Excel Data Manager",
+  "description": "WeighingQR Desktop App — Excel Data Manager",
   "main": "electron/main.js",
   "scripts": {
     "build:ui": "vite build",
@@ -34,10 +34,26 @@
   "build": {
     "appId": "com.daptariagro.seedmanagement",
     "productName": "Seed Management",
-    "directories": { "output": "release", "buildResources": "installer" },
-    "files": ["dist/**/*", "electron/**/*", "shared/**/*", "production.config.json", "package.json"],
+    "directories": {
+      "output": "release",
+      "buildResources": "installer"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "shared/**/*",
+      "production.config.json",
+      "package.json"
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "signAndEditExecutable": false
     },
     "nsis": {

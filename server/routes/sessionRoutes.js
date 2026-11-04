@@ -299,7 +299,7 @@ router.post('/:id/after-weight', protectUser, sessionMutationLimiter, async (req
     // Difference is computed and persisted here (server-side), not left to
     // the mobile UI, so the saved record is authoritative.
     if (session.beforeWeight != null) {
-      patch.difference = afterWeight - session.beforeWeight;
+      patch.difference = Number((afterWeight - session.beforeWeight).toFixed(3));
     }
 
     // Status re-asserted atomically at the point of write — closes the

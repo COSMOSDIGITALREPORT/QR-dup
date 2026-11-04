@@ -13,6 +13,7 @@ import QrCodeIcon from '@mui/icons-material/QrCode';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
+import { formatWeight } from '../utils/format';
 import api, { sessionAPI } from '../services/api';
 
 export default function Dashboard() {
@@ -125,9 +126,9 @@ export default function Dashboard() {
                       {m.packetUniqueId || s.packet?.uniqueId || '—'}
                     </TableCell>
                     <TableCell sx={{ fontSize: 13 }}>{s.batch?.batchName || '—'}</TableCell>
-                    <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{m.beforeWeight != null ? `${m.beforeWeight} kg` : '—'}</TableCell>
-                    <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{m.afterWeight != null ? `${m.afterWeight} kg` : '—'}</TableCell>
-                    <TableCell sx={{ fontSize: 13, fontWeight: 800 }}>{m.difference != null ? `${m.difference} kg` : '—'}</TableCell>
+                    <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{formatWeight(m.beforeWeight)}</TableCell>
+                    <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{formatWeight(m.afterWeight)}</TableCell>
+                    <TableCell sx={{ fontSize: 13, fontWeight: 800 }}>{formatWeight(m.difference)}</TableCell>
                     <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', color: '#475569' }}>
                       {m.createdAt ? new Date(m.createdAt).toLocaleString() : '—'}
                     </TableCell>

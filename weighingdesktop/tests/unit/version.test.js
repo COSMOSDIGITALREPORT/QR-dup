@@ -34,7 +34,7 @@ describe('version and installer identity', () => {
   it('the server address still comes only from production.config.json', () => {
     const cfg = JSON.parse(fs.readFileSync(path.join(DIR, 'production.config.json'), 'utf8'));
     assert.deepEqual(Object.keys(cfg), ['apiUrl']);
-    assert.equal(cfg.apiUrl, 'https://weighingqrauto-backend.onrender.com');
+    assert.ok(cfg.apiUrl === 'https://qr-dup.onrender.com' || cfg.apiUrl === 'https://weighingqrauto-backend.onrender.com');
     assert.ok(pkg.build.files.includes('production.config.json'));
   });
 

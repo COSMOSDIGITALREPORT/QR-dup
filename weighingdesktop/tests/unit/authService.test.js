@@ -215,7 +215,7 @@ describe('config', () => {
       if (content !== undefined) fs.writeFileSync(path.join(root, 'production.config.json'), content);
       return root;
     };
-    const PRODUCTION = 'https://weighingqrauto-backend.onrender.com';
+    const PRODUCTION = 'https://qr-dup.onrender.com';
 
     it('uses only the address built into the installer', () => {
       const root = rootWith(JSON.stringify({ apiUrl: `${PRODUCTION}/` }));

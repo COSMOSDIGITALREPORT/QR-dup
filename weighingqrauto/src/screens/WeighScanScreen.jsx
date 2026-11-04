@@ -173,8 +173,8 @@ export default function WeighScanScreen() {
     if (activeSessions.length === 1) {
       const m = activeSessions[0].measurement;
       setSessionId(m.sessionId);
-      setBeforeWeightVal(m.beforeWeight != null ? String(m.beforeWeight) : '');
-      setAfterWeightVal(m.afterWeight != null ? String(m.afterWeight) : '');
+      setBeforeWeightVal(m.beforeWeight != null ? (Number.isFinite(Number(m.beforeWeight)) ? Number(m.beforeWeight).toFixed(3) : String(m.beforeWeight)) : '');
+      setAfterWeightVal(m.afterWeight != null ? (Number.isFinite(Number(m.afterWeight)) ? Number(m.afterWeight).toFixed(3) : String(m.afterWeight)) : '');
       setBeforeWeightState(m.beforeWeight != null ? WEIGHT_SAVED : null);
       setAfterWeightState(m.afterWeight != null ? WEIGHT_SAVED : null);
       setResumedBeforePhotoUrl(m.beforePhotoUrl || null);
@@ -930,7 +930,7 @@ export default function WeighScanScreen() {
             <View style={styles.autoWeightCard}>
               <Icon name="calculate" size={20} color={COLORS.success} />
               <Text style={styles.autoWeightTxt}>
-                Difference: <Text style={{fontWeight: '800'}}>{diffPreview >= 0 ? '+' : ''}{diffPreview.toFixed(2)} kg</Text>
+                Difference: <Text style={{fontWeight: '800'}}>{diffPreview >= 0 ? '+' : ''}{diffPreview.toFixed(3)} kg</Text>
               </Text>
             </View>
           )}

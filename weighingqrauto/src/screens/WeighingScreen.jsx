@@ -121,7 +121,7 @@ export default function WeighingScreen({route}) {
         <View style={styles.ringCenter}>
           {liveWeight !== null ? (
             <>
-              <Text style={[styles.liveWeightVal, {color: sc.color}]}>{liveWeight.toFixed(2)}</Text>
+              <Text style={[styles.liveWeightVal, {color: sc.color}]}>{liveWeight.toFixed(3)}</Text>
               <Text style={[styles.liveWeightUnit, {color: sc.color}]}>kg</Text>
             </>
           ) : (

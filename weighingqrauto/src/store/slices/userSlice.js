@@ -11,15 +11,57 @@ const asErrorPayload = err => ({
 
 export const loginThunk = createAsyncThunk(
   'user/login',
-  async ({email, password}, {rejectWithValue}) => {
+  async ({email, password, isAdmin}, {rejectWithValue}) => {
+    const cleanEmail = (email || '').trim();
     try {
-      const data = await apiFetch('/api/user/login', {
-        method: 'POST',
-        body: {email, password},
-      });
-      await AsyncStorage.setItem('@session_user', JSON.stringify(data.user));
-      await AsyncStorage.setItem('@session_token', data.token);
-      return {user: data.user, token: data.token};
+      if (isAdmin) {
+        const data = await apiFetch('/api/auth/login', {
+          method: 'POST',
+          body: {email: cleanEmail, password},
+        });
+        const user = {
+          ...data.admin,
+          id: data.admin.id || data.admin._id,
+          role: data.admin.role || 'admin',
+          isAdmin: true,
+        };
+        await AsyncStorage.setItem('@session_user', JSON.stringify(user));
+        await AsyncStorage.setItem('@session_token', data.token);
+        return {user, token: data.token};
+      }
+
+      // Default: try operator login first
+      try {
+        const data = await apiFetch('/api/user/login', {
+          method: 'POST',
+          body: {email: cleanEmail, password},
+        });
+        await AsyncStorage.setItem('@session_user', JSON.stringify(data.user));
+        await AsyncStorage.setItem('@session_token', data.token);
+        return {user: data.user, token: data.token};
+      } catch (err) {
+        // If operator login failed with 401, auto-try admin login
+        if (err?.status === 401 || err?.type === 'auth') {
+          try {
+            const adminData = await apiFetch('/api/auth/login', {
+              method: 'POST',
+              body: {email: cleanEmail, password},
+            });
+            const user = {
+              ...adminData.admin,
+              id: adminData.admin.id || adminData.admin._id,
+              role: adminData.admin.role || 'admin',
+              isAdmin: true,
+            };
+            await AsyncStorage.setItem('@session_user', JSON.stringify(user));
+            await AsyncStorage.setItem('@session_token', adminData.token);
+            return {user, token: adminData.token};
+          } catch (_) {
+            // Re-throw original error
+          }
+        }
+        throw err;
+      }
     } catch (err) {
       return rejectWithValue(asErrorPayload(err));
     }
@@ -64,7 +106,17 @@ export const fetchMeThunk = createAsyncThunk(
   'user/fetchMe',
   async (_, {getState, rejectWithValue}) => {
     try {
-      const {token} = getState().user;
+      const {token, user} = getState().user;
+      if (!token) return null;
+      if (user?.isAdmin || user?.role === 'admin' || user?.role === 'superadmin') {
+        const data = await apiFetch('/api/auth/me', {method: 'GET', token});
+        return {
+          ...data.admin,
+          id: data.admin.id || data.admin._id,
+          role: data.admin.role || 'admin',
+          isAdmin: true,
+        };
+      }
       const data = await apiFetch('/api/user/me', {method: 'GET', token});
       return data.user;
     } catch (err) {

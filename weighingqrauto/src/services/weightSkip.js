@@ -37,7 +37,7 @@ export function weightDifference(before, after) {
 // "+1.20 kg" / "-0.05 kg", or "Not calculated" when there is no difference.
 export function differenceLabel(difference) {
   const d = actualWeight(difference);
-  return d == null ? 'Not calculated' : `${d >= 0 ? '+' : ''}${d.toFixed(2)} kg`;
+  return d == null ? 'Not calculated' : `${d >= 0 ? '+' : ''}${d.toFixed(3)} kg`;
 }
 
 // A weight on the weighing screen: "1.70 kg", or "Skipped".
@@ -56,7 +56,7 @@ export function canSkipWeight(state) {
 export function measurementSummary(before, after, difference) {
   const part = v => {
     const w = actualWeight(v);
-    return w == null ? 'skipped' : `${w.toFixed(2)} kg`;
+    return w == null ? 'skipped' : `${w.toFixed(3)} kg`;
   };
   const d = actualWeight(difference);
   return `Before ${part(before)} · After ${part(after)} · Diff ${d == null ? 'not calculated' : differenceLabel(d)}`;
@@ -65,7 +65,7 @@ export function measurementSummary(before, after, difference) {
 // A saved record's weight to two decimals, or "Skipped" when none was recorded.
 export function recordedWeight(value) {
   const w = actualWeight(value);
-  return w == null ? SKIPPED_LABEL : w.toFixed(2);
+  return w == null ? SKIPPED_LABEL : w.toFixed(3);
 }
 
 // For a history row without a difference: which weight(s) were skipped.

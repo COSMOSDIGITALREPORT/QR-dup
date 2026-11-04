@@ -17,6 +17,7 @@ const desktop = window.desktop;
 const ROLE_LABEL = { superadmin: 'Superadmin', admin: 'Admin', operator: 'Operator (admin)' };
 
 export default function DataManagerScreen({ session, info }) {
+  const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(null);
   const [toastState, setToastState] = useState({ open: false, severity: 'info', message: '' });
   const setToast = useCallback((next) => setToastState((current) => (next ? { open: true, ...next } : { ...current, open: false })), []);
@@ -29,10 +30,12 @@ export default function DataManagerScreen({ session, info }) {
     let active = true;
     const off = desktop.on('data', (data) => {
       if (!active) return;
+      setRows(data.rows || []);
       setStatus(data.status);
     });
     desktop.call('data.get').then((data) => {
       if (!active) return;
+      setRows(data.rows || []);
       setStatus(data.status);
     });
     return () => { active = false; off(); };
@@ -57,7 +60,7 @@ export default function DataManagerScreen({ session, info }) {
   const yoySyncing = Boolean(yoy.syncing);
   const yoyLastError = yoy.lastError;
   const yoyLastSync = yoy.lastSyncAt;
-  const yoyRowCount = yoy.rowCount || 0;
+  const yoyRowCount = yoy.rowCount || rows.length || 0;
 
   // Status computation
   let yoyStatusLabel = 'Connected & Synced';
@@ -109,11 +112,11 @@ export default function DataManagerScreen({ session, info }) {
     }
   };
 
-  // Handle Sync Now
-  const handleSyncNow = async () => {
+  // Handle Sync Excel File
+  const handleSyncYoy = async () => {
     try {
       await desktop.call('yoy.sync');
-      setToast({ severity: 'success', message: 'YOY.xlsx synchronized with MongoDB.' });
+      setToast({ severity: 'success', message: 'Excel file synchronized with MongoDB.' });
     } catch (err) {
       fail(err);
     }
@@ -128,11 +131,16 @@ export default function DataManagerScreen({ session, info }) {
     }
   };
 
+  const failed = Boolean(status?.lastError) && status.state !== 'syncing' && status.lastErrorKind !== 'forbidden';
+
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: '#f4f6f8' }} data-testid="data-screen">
+      {/* Top Application Bar */}
       <AppBar position="static" color="default" elevation={1}>
         <Toolbar variant="dense" sx={{ gap: 2 }}>
-          <Typography variant="h6" fontWeight={700} noWrap>Excel Data Manager</Typography>
+          <Typography variant="h6" fontWeight={800} color="#1a227f" noWrap>
+            WeighingQR — Excel Data Manager
+          </Typography>
           <Box sx={{ flexGrow: 1 }} />
           <Typography variant="caption" color="text.secondary" noWrap title={`Version ${info.version} · Server: ${info.apiUrl}`} data-testid="app-version">
             v{info.version} · {info.apiUrl}
@@ -148,7 +156,27 @@ export default function DataManagerScreen({ session, info }) {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* Main Content Area */}
+      <Container maxWidth="lg" sx={{ py: 3, flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        {/* Alerts */}
+        {!session.verified && (
+          <Alert severity="warning" sx={{ mb: 2 }} data-testid="unverified-banner">
+            The server could not be reached to confirm your account. You are seeing the last downloaded records.
+          </Alert>
+        )}
+        {failed && (
+          <Alert
+            severity={status.lastErrorKind === 'offline' ? 'warning' : 'error'}
+            sx={{ mb: 2 }}
+            data-testid="sync-error"
+            action={(
+              <Button color="inherit" size="small" onClick={() => run('sync.now')} data-testid="sync-retry">Retry</Button>
+            )}
+          >
+            {status.lastError}
+          </Alert>
+        )}
+
         {/* Connected Excel Workbook Section */}
         <Paper
           elevation={1}
@@ -223,7 +251,7 @@ export default function DataManagerScreen({ session, info }) {
               </Typography>
               {yoyRowCount > 0 && (
                 <Typography variant="caption" color="#0284c7" fontWeight={700}>
-                  • {yoyRowCount} packets synchronized (15 columns)
+                  • {yoyRowCount} records synchronized
                 </Typography>
               )}
               <Typography variant="caption" color={yoyExists ? '#16a34a' : '#d97706'} fontWeight={600}>
@@ -243,7 +271,7 @@ export default function DataManagerScreen({ session, info }) {
                 </Button>
               )}
             >
-              Selected: <strong>{pendingSelection.fileName}</strong> ({pendingSelection.filePath}). Click "Connect Workbook" to save and set this as the active workbook.
+              Selected: <strong>{pendingSelection.fileName}</strong> ({pendingSelection.filePath}). Click &ldquo;Activate Connection&rdquo; to save and connect.
             </Alert>
           )}
 
@@ -255,7 +283,7 @@ export default function DataManagerScreen({ session, info }) {
           )}
 
           {/* Action Buttons Bar */}
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems="center" flexWrap="wrap">
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
             <Button
               variant="outlined"
               size="medium"
@@ -295,12 +323,22 @@ export default function DataManagerScreen({ session, info }) {
               variant="contained"
               color="primary"
               size="medium"
-              onClick={handleSyncNow}
+              onClick={handleSyncYoy}
               disabled={yoySyncing}
-              sx={{ textTransform: 'none', fontWeight: 700, minWidth: 120 }}
+              sx={{ textTransform: 'none', fontWeight: 700, minWidth: 130 }}
               data-testid="sync-yoy-btn"
             >
-              {yoySyncing ? 'Syncing…' : 'Sync Now'}
+              {yoySyncing ? 'Syncing…' : 'Sync Excel File'}
+            </Button>
+            <Button
+              variant="outlined"
+              size="medium"
+              onClick={() => run('sync.now')}
+              disabled={status?.state === 'syncing'}
+              data-testid="sync-now"
+              sx={{ textTransform: 'none', fontWeight: 700, minWidth: 140 }}
+            >
+              Full Sync from DB
             </Button>
             <Box sx={{ flexGrow: 1 }} />
             <Stack direction="row" spacing={1}>
@@ -353,15 +391,19 @@ export default function DataManagerScreen({ session, info }) {
               2. <strong>Connect Workbook:</strong> Click &ldquo;Connect Workbook&rdquo; to save this file path in your application settings. Next time you open the app, it will automatically connect to this file.
             </Typography>
             <Typography variant="body2" color="#64748b">
-              3. <strong>Sync Now:</strong> Click &ldquo;Sync Now&rdquo; to fetch seed records from the production MongoDB database and write them into all 15 columns.
+              3. <strong>Sync Excel File:</strong> Click &ldquo;Sync Excel File&rdquo; to synchronize seed records from the MongoDB database directly into your connected Excel workbook.
             </Typography>
             <Typography variant="body2" color="#64748b">
               4. <strong>Open in Excel:</strong> Opens the live connected workbook directly in Microsoft Excel.
+            </Typography>
+            <Typography variant="body2" color="#64748b">
+              5. <strong>Full Sync from DB:</strong> Pulls all recent changes from the production database to keep local records completely up to date.
             </Typography>
           </Stack>
         </Paper>
       </Container>
 
+      {/* Toast Notification */}
       <Snackbar
         open={toastState.open}
         autoHideDuration={6000}

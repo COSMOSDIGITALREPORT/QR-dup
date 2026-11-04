@@ -10,6 +10,8 @@ import ProductDetailScreen from '../screens/ProductDetailScreen';
 import WeighingScreen from '../screens/WeighingScreen';
 import ResultScreen from '../screens/ResultScreen';
 import WeighScanScreen from '../screens/WeighScanScreen';
+import BatchesScreen from '../screens/BatchesScreen';
+import ProductsScreen from '../screens/ProductsScreen';
 
 export const useNavigation = useNav;
 
@@ -23,6 +25,9 @@ export default function AppNavigator() {
         <Stack.Screen name="Login" component={LoginScreen} options={{title: 'Sign In'}} />
         <Stack.Screen name="Register" component={RegisterScreen} options={{headerShown: false}} />
         <Stack.Screen name="MainTabs" component={MainTabsPaper} options={{headerShown: false}} />
+
+        <Stack.Screen name="Batches" component={BatchesScreen} options={{title: 'Batches'}} />
+        <Stack.Screen name="Products" component={ProductsScreen} options={{title: 'Products'}} />
 
         <Stack.Screen name="Scanner" component={ScannerScreen} options={{headerShown: false}} />
         <Stack.Screen name="ProductDetail" component={ProductDetailScreen} options={{title: 'Product Details'}} />

@@ -166,7 +166,7 @@ export default function DashboardScreen() {
                     <Text style={styles.recentMeta}>{m.packetUniqueId || s.packet?.uniqueId || '—'}</Text>
                   </View>
                   <Text style={[styles.recentWeight, {color: isLoss ? '#ca8a04' : COLORS.primary}]}>
-                    {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} kg` : '—'}
+                    {diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(3)} kg` : '—'}
                   </Text>
                 </View>
               );

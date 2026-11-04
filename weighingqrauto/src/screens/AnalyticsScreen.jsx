@@ -85,8 +85,8 @@ export default function AnalyticsScreen() {
   const statCards = [
     {icon: 'scale', label: 'Total Measurements', value: totalMeasurements != null ? String(totalMeasurements) : '—', color: COLORS.primary},
     {icon: 'check-circle', label: 'Linked (Completed)', value: linkedTotal != null ? String(linkedTotal) : '—', color: '#16a34a'},
-    {icon: 'trending-up', label: 'Avg Difference', value: avgDiff != null ? `${avgDiff >= 0 ? '+' : ''}${avgDiff.toFixed(2)} kg` : '—', color: '#6366f1'},
-    {icon: 'compare-arrows', label: 'Min / Max Diff', value: (minDiff != null && maxDiff != null) ? `${minDiff.toFixed(2)} / ${maxDiff.toFixed(2)} kg` : '—', color: '#ca8a04'},
+    {icon: 'trending-up', label: 'Avg Difference', value: avgDiff != null ? `${avgDiff >= 0 ? '+' : ''}${avgDiff.toFixed(3)} kg` : '—', color: '#6366f1'},
+    {icon: 'compare-arrows', label: 'Min / Max Diff', value: (minDiff != null && maxDiff != null) ? `${minDiff.toFixed(3)} / ${maxDiff.toFixed(3)} kg` : '—', color: '#ca8a04'},
   ];
 
   return (
@@ -150,7 +150,7 @@ export default function AnalyticsScreen() {
                     </View>
                     <Text style={[styles.productPct, {
                       color: t.avgDiff == null ? COLORS.muted : t.avgDiff < 0 ? '#dc2626' : '#16a34a',
-                    }]}>{t.avgDiff != null ? `${t.avgDiff >= 0 ? '+' : ''}${t.avgDiff.toFixed(2)}` : '—'}</Text>
+                    }]}>{t.avgDiff != null ? `${t.avgDiff >= 0 ? '+' : ''}${t.avgDiff.toFixed(3)}` : '—'}</Text>
                   </View>
                 </View>
               ))
@@ -178,7 +178,7 @@ export default function AnalyticsScreen() {
                       <Text style={styles.machineName}>{s.batch?.seedType || 'Seed Packet'}</Text>
                     </View>
                     <View style={[styles.countBadge, {backgroundColor: color + '18'}]}>
-                      <Text style={[styles.countTxt, {color}]}>{diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} kg` : '—'}</Text>
+                      <Text style={[styles.countTxt, {color}]}>{diff != null ? `${diff >= 0 ? '+' : ''}${diff.toFixed(3)} kg` : '—'}</Text>
                     </View>
                   </View>
                 );

@@ -14,6 +14,7 @@ import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
 import { sessionAPI } from '../services/api';
+import { formatWeight } from '../utils/format';
 
 const statusStyle = {
   linked: { bg: '#dcfce7', color: '#16a34a', label: 'Linked' },
@@ -24,7 +25,7 @@ const REPORT_COLUMNS = ['Packet ID', 'Batch Name', 'Batch Number', 'Seed Type', 
 const sessionRow = (s) => [
   s.measurement.packetUniqueId || s.packet?.uniqueId || '',
   s.batch?.batchName || '', s.batch?.batchNumber || '', s.batch?.seedType || '',
-  s.measurement.beforeWeight ?? '', s.measurement.afterWeight ?? '', s.measurement.difference ?? '',
+  s.measurement.beforeWeight != null ? formatWeight(s.measurement.beforeWeight, false) : '', s.measurement.afterWeight != null ? formatWeight(s.measurement.afterWeight, false) : '', s.measurement.difference != null ? formatWeight(s.measurement.difference, false) : '',
   new Date(s.measurement.createdAt).toLocaleString(),
   s.operator?.name || '', s.device?.deviceId || '', s.measurement.status || '',
 ];
@@ -220,8 +221,8 @@ export default function Reports() {
         {[
           { title: 'Total Measurements', value: String(pagination.total), icon: <ScaleIcon sx={{ color: '#1a227f', fontSize: 22 }} />, iconBg: 'rgba(26,34,127,0.08)' },
           { title: 'Linked',             value: String(linkedCount),                          icon: <TaskAltIcon sx={{ color: '#10b981', fontSize: 22 }} />, iconBg: 'rgba(16,185,129,0.08)' },
-          { title: 'Avg Difference',     value: avgDifference != null ? `${avgDifference.toFixed(2)} kg` : '—', icon: <TrendingUpIcon sx={{ color: '#6366f1', fontSize: 22 }} />, iconBg: 'rgba(99,102,241,0.08)' },
-          { title: 'Min / Max Difference', value: (minDifference != null && maxDifference != null) ? `${minDifference.toFixed(2)} / ${maxDifference.toFixed(2)} kg` : '—', icon: <CompareArrowsIcon sx={{ color: '#f59e0b', fontSize: 22 }} />, iconBg: 'rgba(245,158,11,0.08)' },
+          { title: 'Avg Difference',     value: avgDifference != null ? `${avgDifference.toFixed(3)} kg` : '—', icon: <TrendingUpIcon sx={{ color: '#6366f1', fontSize: 22 }} />, iconBg: 'rgba(99,102,241,0.08)' },
+          { title: 'Min / Max Difference', value: (minDifference != null && maxDifference != null) ? `${minDifference.toFixed(3)} / ${maxDifference.toFixed(3)} kg` : '—', icon: <CompareArrowsIcon sx={{ color: '#f59e0b', fontSize: 22 }} />, iconBg: 'rgba(245,158,11,0.08)' },
         ].map(c => (
           <Grid size={{ xs: 12, sm: 6, md: 3 }} key={c.title}><StatCard {...c} /></Grid>
         ))}
@@ -252,7 +253,7 @@ export default function Reports() {
                     sx={{ flex: 1, height: 10, borderRadius: 99, background: '#f1f5f9',
                       '& .MuiLinearProgress-bar': { background: barColor, borderRadius: 99 } }} />
                   <Typography sx={{ fontSize: 12, fontWeight: 800, minWidth: 60, color: barColor }}>
-                    {d != null ? `${d} kg` : '—'}
+                    {formatWeight(d)}
                   </Typography>
                 </Box>
               );
@@ -294,10 +295,10 @@ export default function Reports() {
                             <Typography sx={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace' }}>{s.batch?.batchNumber || ''}</Typography>
                           </TableCell>
                           <TableCell sx={{ fontSize: 13 }}>{s.batch?.seedType || '—'}</TableCell>
-                          <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{m.beforeWeight != null ? `${m.beforeWeight} kg` : '—'}</TableCell>
-                          <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{m.afterWeight != null ? `${m.afterWeight} kg` : '—'}</TableCell>
+                          <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{formatWeight(m.beforeWeight)}</TableCell>
+                          <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{formatWeight(m.afterWeight)}</TableCell>
                           <TableCell sx={{ fontSize: 14, fontWeight: 800, color: m.difference != null && m.difference < 0 ? '#dc2626' : '#0f172a' }}>
-                            {m.difference != null ? `${m.difference} kg` : '—'}
+                            {formatWeight(m.difference)}
                           </TableCell>
                           <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', color: '#475569' }}>
                             {m.createdAt ? new Date(m.createdAt).toLocaleString() : '—'}

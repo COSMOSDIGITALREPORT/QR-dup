@@ -66,7 +66,7 @@ export default function ResultScreen({route}) {
     dispatch(addNotification({
       type: status,
       title: `Weighing ${status} — ${productName}`,
-      body: `${weight.toFixed(2)} kg  •  Nominal: ${nominalWeight.toFixed(2)} kg  •  ${statusLabels[status]}`,
+      body: `${weight.toFixed(3)} kg  •  Nominal: ${nominalWeight.toFixed(3)} kg  •  ${statusLabels[status]}`,
     }));
 
     navigation.navigate('MainTabs', {initialTab: 'history'});
@@ -88,7 +88,7 @@ export default function ResultScreen({route}) {
           </View>
           <Text style={styles.readingLabel}>CURRENT READING</Text>
           <View style={styles.readingRow}>
-            <Text style={[styles.weightVal, {color: statusColor[status]}]}>{weight.toFixed(2)}</Text>
+            <Text style={[styles.weightVal, {color: statusColor[status]}]}>{weight.toFixed(3)}</Text>
             <Text style={styles.weightUnit}>kg</Text>
           </View>
           <View style={[styles.stableChip, {backgroundColor: statusBg[status]}]}>
@@ -97,7 +97,7 @@ export default function ResultScreen({route}) {
               {status === 'PASS' ? 'Within tolerance' : status === 'WARN' ? 'Slight deviation' : 'Out of tolerance'}
             </Text>
           </View>
-          <Text style={styles.nominalTxt}>Nominal: {nominalWeight.toFixed(2)} kg</Text>
+          <Text style={styles.nominalTxt}>Nominal: {nominalWeight.toFixed(3)} kg</Text>
         </View>
 
         {/* Details */}

@@ -70,15 +70,17 @@ function formatPacketValues(p) {
   const status = String(p.status || 'empty').trim();
 
   let before = null;
-  const rawBefore = typeof p.before === 'number' ? p.before : p.beforeWeight;
-  if (typeof rawBefore === 'number' && Number.isFinite(rawBefore)) {
-    before = rawBefore;
+  const rawBefore = p.before !== undefined && p.before !== null ? p.before : p.beforeWeight;
+  if (rawBefore !== undefined && rawBefore !== null && rawBefore !== '') {
+    const n = Number(rawBefore);
+    if (Number.isFinite(n)) before = n;
   }
 
   let after = null;
-  const rawAfter = typeof p.after === 'number' ? p.after : p.afterWeight;
-  if (typeof rawAfter === 'number' && Number.isFinite(rawAfter)) {
-    after = rawAfter;
+  const rawAfter = p.after !== undefined && p.after !== null ? p.after : p.afterWeight;
+  if (rawAfter !== undefined && rawAfter !== null && rawAfter !== '') {
+    const n = Number(rawAfter);
+    if (Number.isFinite(n)) after = n;
   }
 
   const beforePhoto = String(p.beforePhoto || p.beforePhotoUrl || '').trim();
@@ -123,7 +125,7 @@ function applyCellStyles(row, isHeader = false) {
       } else if (col === 10 || col === 11) {
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
         if (typeof cell.value === 'number') {
-          cell.numFmt = '0.00';
+          cell.numFmt = '0.000';
         }
       } else {
         cell.alignment = { vertical: 'middle', horizontal: 'left' };

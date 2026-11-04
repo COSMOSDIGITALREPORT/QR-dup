@@ -12,6 +12,7 @@ import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
 import { sessionAPI, API_ORIGIN } from '../services/api';
+import { formatWeight } from '../utils/format';
 
 // Centralized, env-driven backend origin (services/api.js) — only
 // relative/local paths need it; real Cloudinary URLs are already absolute
@@ -41,7 +42,7 @@ const exportCSV = (sessions) => {
   const rows = sessions.map(s => [
     s.measurement.packetUniqueId || s.packet?.uniqueId || '',
     s.batch?.batchName || '', s.batch?.batchNumber || '', s.batch?.seedType || '',
-    s.measurement.beforeWeight ?? '', s.measurement.afterWeight ?? '', s.measurement.difference ?? '',
+    s.measurement.beforeWeight != null ? formatWeight(s.measurement.beforeWeight, false) : '', s.measurement.afterWeight != null ? formatWeight(s.measurement.afterWeight, false) : '', s.measurement.difference != null ? formatWeight(s.measurement.difference, false) : '',
     new Date(s.measurement.createdAt).toLocaleString(),
     s.operator?.name || '', s.device?.deviceId || '', s.measurement.status || '',
   ]);
@@ -114,7 +115,7 @@ export default function Records() {
   const linkedCount = sessions.filter(s => s.measurement.status === 'linked').length;
   const diffsOnPage = sessions.map(s => s.measurement.difference).filter(d => d != null);
   const avgDifference = diffsOnPage.length
-    ? (diffsOnPage.reduce((sum, d) => sum + d, 0) / diffsOnPage.length).toFixed(2)
+    ? (diffsOnPage.reduce((sum, d) => sum + d, 0) / diffsOnPage.length).toFixed(3)
     : '0';
 
   return (
@@ -193,10 +194,10 @@ export default function Records() {
                         <Typography sx={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace' }}>{s.batch?.batchNumber || ''}</Typography>
                       </TableCell>
                       <TableCell sx={{ fontSize: 13 }}>{s.batch?.seedType || '—'}</TableCell>
-                      <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{m.beforeWeight != null ? `${m.beforeWeight} kg` : '—'}</TableCell>
-                      <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{m.afterWeight != null ? `${m.afterWeight} kg` : '—'}</TableCell>
+                      <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{formatWeight(m.beforeWeight)}</TableCell>
+                      <TableCell sx={{ fontSize: 13, fontWeight: 700 }}>{formatWeight(m.afterWeight)}</TableCell>
                       <TableCell sx={{ fontSize: 14, fontWeight: 800, color: m.difference != null && m.difference < 0 ? '#dc2626' : '#0f172a' }}>
-                        {m.difference != null ? `${m.difference} kg` : '—'}
+                        {formatWeight(m.difference)}
                       </TableCell>
                       <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', color: '#475569' }}>
                         {m.createdAt ? new Date(m.createdAt).toLocaleString() : '—'}

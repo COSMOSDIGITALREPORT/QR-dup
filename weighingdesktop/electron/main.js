@@ -157,7 +157,7 @@ function createWindow() {
     height: 840,
     minWidth: 960,
     minHeight: 600,
-    title: 'Seed Management',
+    title: 'WeighingQR — Excel Data Manager',
     backgroundColor: '#f4f6f8',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
