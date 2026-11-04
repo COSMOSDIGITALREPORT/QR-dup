@@ -796,7 +796,7 @@ export default function Products() {
                 <Table stickyHeader size="small">
                   <TableHead>
                     <TableRow>
-                      {['Product ID', 'Product Name', 'Crop Name', 'Batch Name / Code', 'Individual QR Number', 'Location', 'QR Code', 'Status', 'Action'].map(h => (
+                      {['Product ID', 'Product Name', 'Crop Name', 'Batch Name / Code', 'Individual QR Number', 'QR Code', 'Status', 'Action'].map(h => (
                         <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, background: '#f8fafc' }}>{h}</TableCell>
                       ))}
                     </TableRow>
@@ -832,9 +832,6 @@ export default function Products() {
                           </TableCell>
                           <TableCell sx={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#0f172a' }}>
                             {r.locationCode || r.id}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: 12, color: '#475569' }}>
-                            {r.location || '—'}
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
