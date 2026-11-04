@@ -110,9 +110,10 @@ export default function RegisterScreen() {
             value={form.name}
             onChangeText={t => {set('name')(t); setErrors(p => ({...p, name: ''}));}}
             left={<PaperInput.Icon icon="account-outline" />}
-            outlineColor={COLORS.border}
+            outlineColor={errors.name ? COLORS.danger : COLORS.border}
             activeOutlineColor={COLORS.primary}
             outlineStyle={{borderRadius: RADIUS.md}}
+            textColor="#111827"
             error={!!errors.name}
             style={styles.input}
           />
@@ -126,9 +127,10 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             left={<PaperInput.Icon icon="email-outline" />}
-            outlineColor={COLORS.border}
+            outlineColor={errors.email ? COLORS.danger : COLORS.border}
             activeOutlineColor={COLORS.primary}
             outlineStyle={{borderRadius: RADIUS.md}}
+            textColor="#111827"
             error={!!errors.email}
             style={styles.input}
           />
@@ -147,9 +149,10 @@ export default function RegisterScreen() {
                 onPress={() => setShowPw(p => !p)}
               />
             }
-            outlineColor={COLORS.border}
+            outlineColor={errors.password ? COLORS.danger : COLORS.border}
             activeOutlineColor={COLORS.primary}
             outlineStyle={{borderRadius: RADIUS.md}}
+            textColor="#111827"
             error={!!errors.password}
             style={styles.input}
           />
@@ -168,9 +171,10 @@ export default function RegisterScreen() {
                 onPress={() => setShowConfirm(p => !p)}
               />
             }
-            outlineColor={COLORS.border}
+            outlineColor={errors.confirm ? COLORS.danger : COLORS.border}
             activeOutlineColor={COLORS.primary}
             outlineStyle={{borderRadius: RADIUS.md}}
+            textColor="#111827"
             error={!!errors.confirm}
             style={styles.input}
           />
@@ -262,7 +266,7 @@ const styles = StyleSheet.create({
   serverInfoBox: {backgroundColor: '#e0e7ff'},
   btn: {borderRadius: RADIUS.md, marginTop: SPACING.md},
   btnContent: {height: 52},
-  btnLabel: {fontSize: 16, fontWeight: '700', letterSpacing: 0.3},
+  btnLabel: {fontSize: 16, fontWeight: '700', letterSpacing: 0.3, color: '#ffffff'},
   loginRow: {flexDirection: 'row', justifyContent: 'center', marginTop: SPACING.lg},
   loginCaption: {fontSize: 13, color: COLORS.muted},
   loginLink: {fontSize: 13, color: COLORS.primary, fontWeight: '700'},

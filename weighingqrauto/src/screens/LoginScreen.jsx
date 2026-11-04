@@ -16,7 +16,6 @@ export default function LoginScreen() {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [showPw,   setShowPw]   = useState(false);
-  const [isAdminRole, setIsAdminRole] = useState(false);
   const [emailErr, setEmailErr] = useState('');
   const [pwErr,    setPwErr]    = useState('');
   const [serverStatus, setServerStatus] = useState('checking'); // 'checking' | 'found' | 'not-found'
@@ -53,7 +52,8 @@ export default function LoginScreen() {
     dispatch(clearError());
     if (!validate()) return;
 
-    const result = await dispatch(loginThunk({email: email.trim(), password, isAdmin: isAdminRole}));
+    // Operator login only
+    const result = await dispatch(loginThunk({email: email.trim(), password, isAdmin: false}));
     if (loginThunk.fulfilled.match(result)) {
       dispatch(fetchMeThunk()); // verify token against protectUser, non-blocking
       navigation.replace('MainTabs');
@@ -69,36 +69,18 @@ export default function LoginScreen() {
         <Pressable style={styles.backBtn} onPress={() => navigation.replace('Splash')}>
           <Icon name="arrow-back" size={22} color={COLORS.text} />
         </Pressable>
-        <Text style={styles.topTitle}>{isAdminRole ? 'Admin Sign In' : 'Sign In'}</Text>
+        <Text style={styles.topTitle}>Sign In</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.heroWrap}>
-        <View style={[styles.heroBox, isAdminRole && {backgroundColor: '#1a227f'}]}>
-          <Icon name={isAdminRole ? 'admin-panel-settings' : 'lock-open'} size={36} color={COLORS.white} />
+        <View style={styles.heroBox}>
+          <Icon name="lock-open" size={36} color={COLORS.white} />
         </View>
-        <Text style={styles.heading}>{isAdminRole ? 'Admin Portal' : 'Welcome Back'}</Text>
+        <Text style={styles.heading}>Welcome Back</Text>
         <Text style={styles.headingCaption}>
-          {isAdminRole
-            ? 'Sign in as Admin or SuperAdmin to manage batches and products'
-            : 'Sign in to access the industrial management system'}
+          Sign in to access the industrial management system
         </Text>
-
-        {/* Role Selector Tabs */}
-        <View style={styles.roleTabsWrap}>
-          <Pressable
-            style={[styles.roleTab, !isAdminRole && styles.roleTabActive]}
-            onPress={() => setIsAdminRole(false)}>
-            <Icon name="person" size={16} color={!isAdminRole ? '#ffffff' : COLORS.muted} />
-            <Text style={[styles.roleTabTxt, !isAdminRole && styles.roleTabTxtActive]}>Operator</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.roleTab, isAdminRole && styles.roleTabActiveAdmin]}
-            onPress={() => setIsAdminRole(true)}>
-            <Icon name="security" size={16} color={isAdminRole ? '#ffffff' : COLORS.muted} />
-            <Text style={[styles.roleTabTxt, isAdminRole && styles.roleTabTxtActive]}>Admin</Text>
-          </Pressable>
-        </View>
       </View>
 
       <View style={styles.form}>

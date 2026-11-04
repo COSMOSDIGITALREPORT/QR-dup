@@ -127,19 +127,35 @@ export default function ProductDetailScreen() {
     ? new Date(batch.createdAt).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})
     : '—';
 
-  // Only fields that actually exist on SeedBatch/SeedPacket are shown here —
-  // Warehouse/Rack/Shelf come straight from the same populated `batchId`
-  // GET /api/packets/:uniqueId already returns (packetRoutes.js selects
-  // 'warehouse rack shelf' in its populate). They're optional on SeedBatch,
-  // so an empty/missing value shows '—' rather than being left off or faked.
+  // Match specific seed entry from batch.seeds if available
+  const matchedSeed = Array.isArray(batch?.seeds)
+    ? batch.seeds.find(s => s.locationCode === packet.locationCode || s.crop === packet.crop) || batch.seeds[0]
+    : null;
+
+  const cropName = packet.crop || matchedSeed?.crop || batch?.crop || batch?.seedType || '—';
+  const seedCode = packet.seedCode || matchedSeed?.seedCode || batch?.seedCode || '—';
+  const seedType = packet.seedType || matchedSeed?.seedType || batch?.seedCategory || batch?.seedType || '—';
+  const location = packet.locationCode || matchedSeed?.locationCode || batch?.locationCode || '—';
+  const year = (matchedSeed?.year != null && matchedSeed.year !== '') ? String(matchedSeed.year) : (batch?.year != null && batch.year !== '' ? String(batch.year) : '—');
+  const previousYear = (matchedSeed?.previousYear != null && matchedSeed.previousYear !== '') ? String(matchedSeed.previousYear) : (batch?.previousYear != null && batch.previousYear !== '' ? String(batch.previousYear) : '—');
+  const previousLocation = matchedSeed?.previousLocationCode || batch?.previousLocationCode || '—';
+  const gean = matchedSeed?.gene || batch?.gene || '—';
+  const comments = matchedSeed?.comments || batch?.comments || '—';
+
+  // EXACT 12 fields required (Warehouse, Rack and Shelf removed completely)
   const infoCards = [
-    {icon: 'qr-code',        label: 'Packet ID',     value: packet.uniqueId},
-    {icon: 'inventory-2',    label: 'Batch Number',  value: batch?.batchNumber || '—'},
-    {icon: 'local-florist',  label: 'Seed Type',     value: batch?.seedType || '—'},
-    {icon: 'calendar-today', label: 'Batch Created', value: batchCreated},
-    {icon: 'store',          label: 'Warehouse',     value: batch?.warehouse || '—'},
-    {icon: 'view-module',    label: 'Rack',          value: batch?.rack || '—'},
-    {icon: 'layers',         label: 'Shelf',         value: batch?.shelf || '—'},
+    {icon: 'qr-code',        label: 'Packet ID',         value: packet.uniqueId},
+    {icon: 'inventory-2',    label: 'Batch Number',      value: batch?.batchNumber || '—'},
+    {icon: 'eco',            label: 'Crop Name',         value: cropName},
+    {icon: 'tag',            label: 'Seed Code',         value: seedCode},
+    {icon: 'science',        label: 'Seed Type',         value: seedType},
+    {icon: 'calendar-today', label: 'Batch Created',     value: batchCreated},
+    {icon: 'place',          label: 'Location',          value: location},
+    {icon: 'event',          label: 'Year',              value: year},
+    {icon: 'history',        label: 'Previous Year',     value: previousYear},
+    {icon: 'explore',        label: 'Previous Location', value: previousLocation},
+    {icon: 'biotech',        label: 'Gean',              value: gean},
+    {icon: 'comment',        label: 'Comments',          value: comments},
   ];
 
   const beforePhotoUri = resolvePhotoUri(packet.beforePhotoUrl);
@@ -273,14 +289,16 @@ const styles = StyleSheet.create({
   productSub: {fontSize: 14, color: COLORS.muted},
   grid: {
     flexDirection: 'row', flexWrap: 'wrap',
-    paddingHorizontal: SPACING.lg, gap: SPACING.sm, marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.md, gap: SPACING.sm, marginBottom: SPACING.md,
+    justifyContent: 'space-between',
   },
   infoCard: {
-    width: '47%', backgroundColor: COLORS.white,
+    width: '48%', backgroundColor: COLORS.white,
     borderRadius: RADIUS.md, padding: SPACING.md, ...SHADOWS.card,
+    minHeight: 76, justifyContent: 'center',
   },
-  infoLabel: {fontSize: 11, color: COLORS.muted, fontWeight: '600', marginBottom: 2},
-  infoValue: {fontSize: 13, fontWeight: '700', color: COLORS.text},
+  infoLabel: {fontSize: 11, color: COLORS.muted, fontWeight: '600', marginBottom: 3},
+  infoValue: {fontSize: 13, fontWeight: '700', color: COLORS.text, flexShrink: 1},
   recordSection: {marginHorizontal: SPACING.lg, marginBottom: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card},
   recordTitleRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: COLORS.border},
   recordTitle:   {fontSize: 13, fontWeight: '700', color: COLORS.text, padding: SPACING.md},
