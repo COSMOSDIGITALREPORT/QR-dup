@@ -767,12 +767,11 @@ export default function Products() {
                   ['Product Name', detailGroup.name],
                   ['Category', detailGroup.category],
                   ['Batches Included', detailGroup.batchList],
-                  ['Storage Location', detailGroup.locationList],
                   ['Total QR Codes', detailGroup.totalCount],
                   ['Filled Packets', detailGroup.filledCount],
                   ['Empty Packets', detailGroup.emptyCount],
                 ].map(([label, val]) => (
-                  <Grid size={{ xs: 6, sm: 4, md: 1.71 }} key={label}>
+                  <Grid size={{ xs: 6, sm: 4, md: 2 }} key={label}>
                     <Box sx={{ background: '#f8fafc', p: 1.2, borderRadius: 2, border: '1px solid #f1f5f9', textAlign: 'center' }}>
                       <Typography sx={{ fontSize: 13, fontWeight: 800, color: '#0f172a', wordBreak: 'break-word' }}>{val}</Typography>
                       <Typography sx={{ fontSize: 9, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', mt: 0.3 }}>{label}</Typography>
