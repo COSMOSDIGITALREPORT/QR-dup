@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const SeedPacketSchema = new mongoose.Schema({
   uniqueId:     { type: String, required: true, unique: true },
+  productId:    { type: String, default: '' },
   batchId:      { type: mongoose.Schema.Types.ObjectId, ref: 'SeedBatch', required: true },
   qrCodeUrl:    { type: String, default: '' },
   status:       { type: String, enum: ['empty', 'filled'], default: 'empty' },
@@ -35,5 +36,6 @@ const SeedPacketSchema = new mongoose.Schema({
 // sites, none previously covered by any index (uniqueId's unique index is
 // unrelated to this field).
 SeedPacketSchema.index({ batchId: 1 });
+SeedPacketSchema.index({ productId: 1 });
 
 module.exports = mongoose.model('SeedPacket', SeedPacketSchema);

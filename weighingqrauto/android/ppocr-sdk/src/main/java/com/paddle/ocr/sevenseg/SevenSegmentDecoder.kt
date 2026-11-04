@@ -1,5 +1,6 @@
 package com.paddle.ocr.sevenseg
 
+import com.paddle.ocr.BuildConfig
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -39,6 +40,15 @@ import kotlin.math.min
  */
 object SevenSegmentDecoder {
 
+  data class ProfileStats(
+      val matConvertNs: Long = 0L,
+      val lcdNs: Long = 0L,
+      val glowNs: Long = 0L,
+      val ledNs: Long = 0L,
+      val lightNs: Long = 0L,
+      val winningPass: String = "none",
+  )
+
   data class Result(
       val ok: Boolean,
       val text: String?,
@@ -60,6 +70,7 @@ object SevenSegmentDecoder {
       /** The digit cells (x, y, width, height) and the top of the digit row, in the de-slanted working image. */
       val cells: List<IntArray> = emptyList(),
       val top: Int = 0,
+      val profile: ProfileStats? = null,
   )
 
   /** A region of a photo that may be a display window (see [locateCandidates]). */
@@ -185,45 +196,88 @@ object SevenSegmentDecoder {
    * Same safety rule - a frame that cannot be read with certainty is rejected.
    */
   fun decodeLive(bitmap: Bitmap): Result {
+    val t0 = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
     // Utils.bitmapToMat only takes ARGB_8888; the caller keeps ownership of `bitmap`.
     val argb = if (bitmap.config == Bitmap.Config.ARGB_8888) bitmap else bitmap.copy(Bitmap.Config.ARGB_8888, false)
     val mat = BitmapUtils.bitmapToBGRMat(argb)
     if (argb !== bitmap) argb.recycle()
+    val matConvertNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() - t0 else 0L
     return try {
-      decodeLive(mat)
+      decodeLive(mat, matConvertNs)
     } finally {
       mat.release()
     }
   }
 
   /** `bgr` must be an 8-bit 3-channel BGR image. The caller keeps ownership of it. */
-  fun decodeLive(bgr: Mat): Result {
+  fun decodeLive(bgr: Mat, matConvertNs: Long = 0L): Result {
     val scratch = ArrayList<Mat>()
     fun <T : Mat> T.keep(): T {
       scratch.add(this)
       return this
     }
     try {
+      var lcdNs = 0L
+      var glowNs = 0L
+      var ledNs = 0L
+      var lightNs = 0L
+      var winningPass = "none"
+
+      val tLcd = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
       val lcd = decodeImpl(bgr, true) { it.keep() }
-      if (lcd.ok) return lcd
+      if (BuildConfig.OCR_PROFILE) lcdNs = System.nanoTime() - tLcd
+
+      if (lcd.ok) {
+        winningPass = "lcd"
+        val prof = if (BuildConfig.OCR_PROFILE) ProfileStats(matConvertNs, lcdNs, glowNs, ledNs, lightNs, winningPass) else null
+        return lcd.copy(profile = prof)
+      }
       // Over-exposed LED digits with unlit segments showing (a real LED scale): found by the
       // lit strokes themselves. Tried before the dark-panel LED reader, which costs several
       // times as much and cannot read burnt-out digits anyway. Once it has found a row of lit
       // digits its verdict stands - a refusal of that row is not handed on for another
       // reader to guess at.
+      val tGlow = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
       val glow = decodeGlow(bgr) { it.keep() }
-      if (glow.ok) return glow
-      if (glow.box != null) return glow.copy(detail = "lcd=${lcd.reason} ${glow.detail ?: ""}".trim())
+      if (BuildConfig.OCR_PROFILE) glowNs = System.nanoTime() - tGlow
+
+      if (glow.ok) {
+        winningPass = "glow"
+        val prof = if (BuildConfig.OCR_PROFILE) ProfileStats(matConvertNs, lcdNs, glowNs, ledNs, lightNs, winningPass) else null
+        return glow.copy(profile = prof)
+      }
+      if (glow.box != null) {
+        val prof = if (BuildConfig.OCR_PROFILE) ProfileStats(matConvertNs, lcdNs, glowNs, ledNs, lightNs, winningPass) else null
+        return glow.copy(detail = "lcd=${lcd.reason} ${glow.detail ?: ""}".trim(), profile = prof)
+      }
+
+      val tLed = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
       val led = decodeLed(bgr) { it.keep() }
-      if (led.ok) return led
+      if (BuildConfig.OCR_PROFILE) ledNs = System.nanoTime() - tLed
+
+      if (led.ok) {
+        winningPass = "led"
+        val prof = if (BuildConfig.OCR_PROFILE) ProfileStats(matConvertNs, lcdNs, glowNs, ledNs, lightNs, winningPass) else null
+        return led.copy(profile = prof)
+      }
       // Dark digits on a light panel of any other colour (grey, green, yellow, white
       // backlight): the LCD reader again, on whatever light window sits mid-frame.
+      val tLight = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
       val panel = findLightPanel(bgr) { it.keep() }
       val light = if (panel != null) decodeImpl(bgr, true, panel) { it.keep() } else null
-      if (light != null && light.ok) return light.copy(kind = "light")
+      if (BuildConfig.OCR_PROFILE) lightNs = System.nanoTime() - tLight
+
+      if (light != null && light.ok) {
+        winningPass = "light"
+        val prof = if (BuildConfig.OCR_PROFILE) ProfileStats(matConvertNs, lcdNs, glowNs, ledNs, lightNs, winningPass) else null
+        return light.copy(kind = "light", profile = prof)
+      }
+
+      val prof = if (BuildConfig.OCR_PROFILE) ProfileStats(matConvertNs, lcdNs, glowNs, ledNs, lightNs, winningPass) else null
       return led.copy(
           detail = "lcd=${lcd.reason} light=${light?.reason ?: "no-light-panel"} ${led.detail ?: ""}".trim(),
-          box = lcd.box ?: led.box ?: light?.box)
+          box = lcd.box ?: led.box ?: light?.box,
+          profile = prof)
     } finally {
       scratch.forEach { it.release() }
     }

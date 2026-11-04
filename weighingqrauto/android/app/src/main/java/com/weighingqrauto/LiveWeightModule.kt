@@ -68,7 +68,10 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
   ) {
     val tag = viewTag.toInt()
     val tCall = System.currentTimeMillis()
+    val tJsCallNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
     ctx.runOnUiQueueThread {
+      val tUiStartNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
+      val tReadbackStartNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
       val frame: Bitmap? =
           try {
             // PreviewView.getBitmap must be called on the UI thread.
@@ -76,6 +79,7 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
           } catch (e: Throwable) {
             null
           }
+      val tReadbackEndNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
       if (frame == null) {
         promise.resolve(Arguments.createMap().apply {
           putBoolean("ok", false)
@@ -85,8 +89,13 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
       }
       val grabMs = System.currentTimeMillis() - tCall
       worker.execute {
+        val tWorkerStartNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
         try {
-          promise.resolve(decode(frame, boxX, boxY, boxW, boxH, saveCrop, saveFrame).apply { putDouble("grabMs", grabMs.toDouble()) })
+          val res = decode(
+              frame, boxX, boxY, boxW, boxH, saveCrop, saveFrame,
+              tJsCallNs, tUiStartNs, tReadbackStartNs, tReadbackEndNs, tWorkerStartNs
+          ).apply { putDouble("grabMs", grabMs.toDouble()) }
+          promise.resolve(res)
         } catch (e: Throwable) {
           promise.reject("LIVE_WEIGHT_ERROR", e.message ?: e.toString(), e)
         } finally {
@@ -96,11 +105,25 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
     }
   }
 
-  private fun decode(frame: Bitmap, bx: Double, by: Double, bw: Double, bh: Double, saveCrop: Boolean, saveFrame: Boolean) =
+  private fun decode(
+      frame: Bitmap,
+      bx: Double,
+      by: Double,
+      bw: Double,
+      bh: Double,
+      saveCrop: Boolean,
+      saveFrame: Boolean,
+      tJsCallNs: Long = 0L,
+      tUiStartNs: Long = 0L,
+      tReadbackStartNs: Long = 0L,
+      tReadbackEndNs: Long = 0L,
+      tWorkerStartNs: Long = 0L,
+  ) =
       Arguments.createMap().apply {
         val t0 = System.currentTimeMillis()
         if (!OpenCVUtils.init(ctx)) throw IllegalStateException("OpenCV native library failed to load")
 
+        val tCropStartNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
         // The decoder finds the display itself, so it gets the guide box plus
         // a margin: the display's frame usually reaches past the digits.
         val x0 = ((bx - 0.10 * bw).coerceIn(0.0, 1.0) * frame.width).toInt()
@@ -121,6 +144,7 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
             crop = scaled
           }
         }
+        val tCropEndNs = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
 
         val r = SevenSegmentDecoder.decodeLive(crop)
         putBoolean("ok", r.ok)
@@ -140,7 +164,10 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
         }
         found?.let { putMap("box", boxMap(it[0], it[1], it[2], it[3])) }
 
+        var diskWriteNs = 0L
+
         if (saveFrame) {
+          val t0Disk = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
           // New files each time (an image shown on screen must not change
           // under it); earlier captures are removed.
           ctx.cacheDir.listFiles { f -> f.name.startsWith("weight_live_cap_") }?.forEach { it.delete() }
@@ -160,12 +187,16 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
             putString("displayUri", "file://${displayFile.absolutePath}")
             putMap("crop", boxMap(p[0], p[1], p[2], p[3]))
           }
+          if (BuildConfig.OCR_PROFILE) diskWriteNs += System.nanoTime() - t0Disk
         }
 
         // TEMPORARY diagnostics (debug builds only): about once a second the
         // frame just read is kept - the 24 most recent - with what the reader
         // made of it, so displays it cannot read can be looked at afterwards.
+        var isDebugFrameSaved = false
         if (BuildConfig.DEBUG && t0 - lastDebugAt >= 1000) {
+          val t0Disk = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
+          isDebugFrameSaved = true
           lastDebugAt = t0
           val slot = debugSlot++ % 24
           val outcome = if (r.ok) "ok ${r.text} ${r.kind}" else "no ${r.reason} ${r.detail ?: ""}"
@@ -178,13 +209,16 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
             // diagnostics must never break a read
           }
           android.util.Log.i("LiveWeight", "frame $slot: $outcome")
+          if (BuildConfig.OCR_PROFILE) diskWriteNs += System.nanoTime() - t0Disk
         }
 
         if (saveCrop) {
+          val t0Disk = if (BuildConfig.OCR_PROFILE) System.nanoTime() else 0L
           // One fixed file, overwritten each time.
           val file = File(ctx.cacheDir, "weight_live_crop.jpg")
           FileOutputStream(file).use { crop.compress(Bitmap.CompressFormat.JPEG, 92, it) }
           putString("cropUri", "file://${file.absolutePath}")
+          if (BuildConfig.OCR_PROFILE) diskWriteNs += System.nanoTime() - t0Disk
         }
         if (crop !== frame) crop.recycle()
         putDouble("ms", (System.currentTimeMillis() - t0).toDouble())
@@ -192,6 +226,31 @@ class LiveWeightModule(private val ctx: ReactApplicationContext) :
         if (BuildConfig.DEBUG) {
           android.util.Log.i("LiveWeight", "read ${System.currentTimeMillis() - t0}ms " +
               (if (r.ok) "ok ${r.text}" else "no ${r.reason} ${r.detail ?: ""}"))
+        }
+
+        if (BuildConfig.OCR_PROFILE && tJsCallNs > 0L) {
+          val prof = r.profile
+          val bgrMatMs = "%.2f".format((prof?.matConvertNs ?: 0L) / 1_000_000.0)
+          val lcdMs = "%.2f".format((prof?.lcdNs ?: 0L) / 1_000_000.0)
+          val glowMs = "%.2f".format((prof?.glowNs ?: 0L) / 1_000_000.0)
+          val ledMs = "%.2f".format((prof?.ledNs ?: 0L) / 1_000_000.0)
+          val lightMs = "%.2f".format((prof?.lightNs ?: 0L) / 1_000_000.0)
+          val won = prof?.winningPass ?: "none"
+          val qMs = "%.2f".format((tUiStartNs - tJsCallNs) / 1_000_000.0)
+          val rbMs = "%.2f".format((tReadbackEndNs - tReadbackStartNs) / 1_000_000.0)
+          val csMs = "%.2f".format((tCropEndNs - tCropStartNs) / 1_000_000.0)
+          val dMs = "%.2f".format(diskWriteNs / 1_000_000.0)
+          val w2rMs = "%.2f".format((System.nanoTime() - tWorkerStartNs) / 1_000_000.0)
+          val totMs = "%.2f".format((System.nanoTime() - tJsCallNs) / 1_000_000.0)
+          val outcome = if (r.ok) "ok text=${r.text} kind=${r.kind}" else "no reason=${r.reason}"
+
+          android.util.Log.i(
+              "OCR_PROF",
+              "frame: queue=${qMs}ms readback=${rbMs}ms cropScale=${csMs}ms bgrMat=${bgrMatMs}ms " +
+                  "passes[lcd=${lcdMs}ms glow=${glowMs}ms led=${ledMs}ms light=${lightMs}ms won=${won}] " +
+                  "disk=${dMs}ms(saveFrame=$saveFrame,dbg=$isDebugFrameSaved,saveCrop=$saveCrop) " +
+                  "workerToResolve=${w2rMs}ms total=${totMs}ms $outcome"
+          )
         }
       }
 

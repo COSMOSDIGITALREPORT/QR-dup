@@ -110,6 +110,11 @@ export function createLiveWeightTracker({minAgree = MIN_AGREEING_READS, maxMisse
   // reliably, and it is worth a factor of ten - so those digits are refused.
   const punctuation = new Map();
 
+  // Dev-only timing for frames-to-steady
+  let sessionStart = null;
+  let sessionFrames = 0;
+  let steadyLogged = false;
+
   const state = () => {
     const latest = reads[reads.length - 1];
     if (!latest) return {status: 'searching', reading: null, agree: 0, message, zero};
@@ -126,6 +131,14 @@ export function createLiveWeightTracker({minAgree = MIN_AGREEING_READS, maxMisse
 
   return {
     push(read, now = Date.now()) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        if (!sessionStart) {
+          sessionStart = now;
+          sessionFrames = 0;
+          steadyLogged = false;
+        }
+        sessionFrames += 1;
+      }
       let parsed = read;
       reads = reads.filter(r => now - r.at <= READ_TTL_MS);
       if (parsed && parsed.ok && typeof parsed.detectedValue === 'string') {
@@ -149,9 +162,24 @@ export function createLiveWeightTracker({minAgree = MIN_AGREEING_READS, maxMisse
         message = parsed && (parsed.category === 'ambiguous' || parsed.category === 'invalid')
           ? parsed.message
           : null;
-        if (misses >= maxMisses) reads = [];
+        if (misses >= maxMisses) {
+          reads = [];
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            sessionStart = null;
+            sessionFrames = 0;
+            steadyLogged = false;
+          }
+        }
       }
-      return state();
+      const st = state();
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        if (st.status === 'steady' && !steadyLogged) {
+          steadyLogged = true;
+          const durationMs = now - sessionStart;
+          console.log(`[OCR_PROF_JS] steady reached: frames=${sessionFrames} time=${durationMs}ms val=${st.reading?.detectedValue}`);
+        }
+      }
+      return st;
     },
     reset() {
       reads = [];
@@ -159,6 +187,11 @@ export function createLiveWeightTracker({minAgree = MIN_AGREEING_READS, maxMisse
       message = null;
       zero = null;
       punctuation.clear();
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        sessionStart = null;
+        sessionFrames = 0;
+        steadyLogged = false;
+      }
       return state();
     },
   };
@@ -266,6 +299,7 @@ export const hasNativeLiveReader = () => !!NativeModules.LiveWeight;
 //   unitLater  do not wait for the unit label: it comes back as the promise
 //              `unitPending` (ML Kit is the slow part of a frame)
 export async function readDisplayFrame(viewTag, box, wantUnit, keep = false, unitLater = false) {
+  const tStart = (typeof __DEV__ !== 'undefined' && __DEV__) ? Date.now() : 0;
   let r;
   try {
     r = await NativeModules.LiveWeight.read(viewTag, box.x, box.y, box.w, box.h, !!wantUnit, !!keep);
@@ -282,9 +316,16 @@ export async function readDisplayFrame(viewTag, box, wantUnit, keep = false, uni
       return null;
     }
   };
-  if (!wantUnit || !r.cropUri) return {...r, unit: null};
-  if (unitLater) return {...r, unit: null, unitPending: readUnit()};
-  return {...r, unit: await readUnit()};
+  let out;
+  if (!wantUnit || !r.cropUri) out = {...r, unit: null};
+  else if (unitLater) out = {...r, unit: null, unitPending: readUnit()};
+  else out = {...r, unit: await readUnit()};
+
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    const cycleMs = Date.now() - tStart;
+    console.log(`[OCR_PROF_JS] cycle=${cycleMs}ms (native=${r.ms || 0}ms grab=${r.grabMs || 0}ms) ok=${r.ok} text=${r.text || r.reason}`);
+  }
+  return out;
 }
 
 // Fallback reader: one captured photo. Never throws: a failure is returned as

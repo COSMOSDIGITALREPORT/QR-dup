@@ -101,6 +101,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
         versionName "1.1"
+        buildConfigField "boolean", "OCR_PROFILE", "false"
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
@@ -125,6 +126,7 @@ android {
         debug {
             signingConfig signingConfigs.debug
             manifestPlaceholders = [usesCleartextTraffic: "true"]
+            buildConfigField "boolean", "OCR_PROFILE", "true"
         }
         release {
             // Release is signed ONLY from android/keystore.properties (private
@@ -134,6 +136,7 @@ android {
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             manifestPlaceholders = [usesCleartextTraffic: "true"]
+            buildConfigField "boolean", "OCR_PROFILE", "false"
         }
     }
 }

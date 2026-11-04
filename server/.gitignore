@@ -1,0 +1,20 @@
+# Environment & Secrets
+.env
+.env.*
+*.env
+*firebase*credentials*.json
+*firebase*adminsdk*.json
+*serviceAccount*.json
+*service-account*.json
+service-account.json
+serviceAccountKey.json
+firebase-key.json
+*.service-account.json
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+

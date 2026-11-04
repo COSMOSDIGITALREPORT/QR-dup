@@ -162,6 +162,7 @@ export default function DuplicateBatchDialog({ open, batchId, onClose, onSuccess
             generated: generatedCount,
             extra: 0,
             cropNames: initialCropNames,
+            packets: item.packets || [],
           };
         });
 
@@ -330,6 +331,13 @@ export default function DuplicateBatchDialog({ open, batchId, onClose, onSuccess
           cropNames: r.cropNames.map(cn => cn.trim()),
           generated: r.generated,
           extra: r.extra,
+          existingPackets: (r.packets || []).map(p => ({
+            _id: p._id,
+            uniqueId: p.uniqueId,
+            productId: p.productId || p.uniqueId,
+            crop: p.crop,
+            locationCode: p.locationCode,
+          })),
         })),
         entries,
       };
@@ -368,7 +376,7 @@ export default function DuplicateBatchDialog({ open, batchId, onClose, onSuccess
           <img class="qr-img" src="${imgFullUrl}" alt="${p.uniqueId}" />
           <div class="crop-name">${cropName}</div>
           <div class="loc-code">${locCode}</div>
-          <div class="pkt-id">${p.uniqueId}</div>
+          <div class="pkt-id">${p.productId || p.uniqueId}</div>
         </div>
       `;
     }).join('');

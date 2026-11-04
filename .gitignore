@@ -10,6 +10,14 @@ node_modules/
 .env.production
 .env.test
 **/.env.test
+*firebase*credentials*.json
+*firebase*adminsdk*.json
+*serviceAccount*.json
+*service-account*.json
+service-account.json
+serviceAccountKey.json
+firebase-key.json
+*.service-account.json
 
 # ─── Build Output ───────────────────────────────────────────────────────────
 dist/

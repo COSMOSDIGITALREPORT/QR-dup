@@ -232,7 +232,7 @@ export default function Batches() {
             <img class="qr-img" src="${imgFullUrl}" alt="${p.uniqueId}" />
             <div class="crop-name">${cropName}</div>
             <div class="loc-code">${locCode}</div>
-            <div class="pkt-id">${p.uniqueId}</div>
+            <div class="pkt-id">${p.productId || p.uniqueId}</div>
           </div>
         `;
       }).join('');

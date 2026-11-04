@@ -7,15 +7,24 @@ android {
     namespace = "com.paddle.ocr"
     compileSdk = 35
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "OCR_PROFILE", "false")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "OCR_PROFILE", "true")
+        }
         release {
             isMinifyEnabled = false
             consumerProguardFiles("proguard-rules.pro")
+            buildConfigField("boolean", "OCR_PROFILE", "false")
         }
     }
     compileOptions {
