@@ -1,7 +1,10 @@
 module.exports = {
   preset: 'react-native',
-  // The preset transforms .js/.ts/.tsx only; the app's screens are .jsx.
+  setupFiles: ['@react-native-async-storage/async-storage/jest/async-storage-mock'],
   transform: {
-    '^.+\\.jsx$': 'babel-jest',
+    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest',
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(jest-)?react-native|@react-native|@react-native-community|@react-navigation|react-redux|immer|redux|@reduxjs)',
+  ],
 };

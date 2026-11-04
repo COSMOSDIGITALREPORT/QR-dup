@@ -44,12 +44,14 @@ export const authAPI = {
 
 // ── Products ──────────────────────────────────────
 export const productAPI = {
-  create:  (data)         => api.post('/products', data),
-  getAll:  (params)       => api.get('/products', { params }),
-  getOne:  (id)           => api.get(`/products/${id}`),
-  update:  (id, data)     => api.put(`/products/${id}`, data),
-  delete:  (id)           => api.delete(`/products/${id}`),
-  qrUrl:   (id)           => `${API_ORIGIN}/api/products/${id}/qr`,
+  create:             (data)         => api.post('/products', data),
+  getAll:             (params)       => api.get('/products', { params }),
+  getOne:             (id)           => api.get(`/products/${id}`),
+  update:             (id, data)     => api.put(`/products/${id}`, data),
+  delete:             (id)           => api.delete(`/products/${id}`),
+  deleteGroup:        (name)         => api.delete(`/products/group/${encodeURIComponent(name)}`),
+  deleteGroupPreview: (name)         => api.get('/products/group/delete-preview', { params: { name } }),
+  qrUrl:              (id)           => `${API_ORIGIN}/api/products/${id}/qr`,
 };
 
 // ── Records ───────────────────────────────────────
@@ -84,16 +86,18 @@ export const sessionAPI = {
 
 // ── Batches ───────────────────────────────────────
 export const batchAPI = {
-  create:   (data) => api.post('/batches', data),
-  getAll:   ()     => api.get('/batches'),
-  getOne:   (id)   => api.get(`/batches/${id}`),
-  qrList:   (id)   => api.get(`/batches/${id}/qr-list`),
-  qrBaseUrl: ()    => API_ORIGIN,
+  create:        (data) => api.post('/batches', data),
+  getAll:        ()     => api.get('/batches'),
+  getOne:        (id)   => api.get(`/batches/${id}`),
+  qrList:        (id)   => api.get(`/batches/${id}/qr-list`),
+  qrBaseUrl:     ()    => API_ORIGIN,
   // Product Inventory filtering (Seed/Batch/Warehouse) — reads real
   // SeedBatch/SeedPacket data only, never the legacy Product collection.
-  inventory: (params) => api.get('/batches/inventory', { params }),
-  addExtraQRs: (id, data) => api.post('/batches', { ...data, batchId: id, action: 'extra-qrs' }),
-  duplicate:   (id, data) => api.post('/batches', { ...data, batchId: id, action: 'duplicate' }),
+  inventory:     (params) => api.get('/batches/inventory', { params }),
+  addExtraQRs:   (id, data) => api.post('/batches', { ...data, batchId: id, action: 'extra-qrs' }),
+  duplicate:     (id, data) => api.post('/batches', { ...data, batchId: id, action: 'duplicate' }),
+  delete:        (id)   => api.delete(`/batches/${id}`),
+  deletePreview: (id)   => api.get(`/batches/${id}/delete-preview`),
 };
 
 // ── Admin ─────────────────────────────────────────

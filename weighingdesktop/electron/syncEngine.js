@@ -215,6 +215,7 @@ function createSyncEngine({
     const startCursor = full ? null : store.getCursor();
     const startedAt = now();
     const collected = [];
+    const allDeletedRecordIds = [];
     let query = { limit: cfg.pageSize };
     let overlapped = false;
     if (startCursor && startCursor.settled) {
@@ -240,6 +241,9 @@ function createSyncEngine({
         throw new ApiError({ kind: 'http', status: 502, message: 'Unexpected response from the server.' });
       }
       collected.push(...data.records);
+      if (Array.isArray(data.deletedRecordIds)) {
+        allDeletedRecordIds.push(...data.deletedRecordIds);
+      }
       if (data.nextCursor) lastCursor = data.nextCursor;
       if (!data.hasMore || !data.nextCursor) break;
       query = { limit: cfg.pageSize, since: data.nextCursor.since, afterId: data.nextCursor.afterId };
@@ -247,6 +251,10 @@ function createSyncEngine({
 
     if (full || !startCursor) store.replaceAll(collected);
     else store.upsertMany(collected);
+
+    if (allDeletedRecordIds.length && typeof store.deleteMany === 'function') {
+      store.deleteMany(allDeletedRecordIds);
+    }
 
     const endCursor = lastCursor || startCursor;
     if (!sameCursor(endCursor, startCursor) || !endCursor) {

@@ -113,7 +113,7 @@ function createCore({ apiUrl, dataDir, workbookDir, tokenStore, fetchImpl, syncC
     try {
       const res = await api.get('/api/desktop-records/yoy-sync');
       if (res && res.data && Array.isArray(res.data.packets)) {
-        const result = await yoyWorkbook.write(res.data.packets);
+        const result = await yoyWorkbook.write(res.data.packets, res.data.deletedPacketIds || []);
         yoyState.lastSyncAt = new Date().toISOString();
         yoyState.rowCount = result.rows;
         yoyState.inserted = result.inserted;

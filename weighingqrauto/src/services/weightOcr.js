@@ -305,18 +305,13 @@ export function weightFieldValue(reading) {
 // or confirmed ("1.70", "0.125", "3190"), never re-rounded to a fixed number
 // of decimals. Calculations use parseFloat of the same string.
 export function shownWeight(value) {
-  if (value == null || value === '') return '0.000';
+  if (value == null || value === '') return '0';
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value.toFixed(3);
   }
   const s = String(value).trim();
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    if (!s.includes('.')) {
-      return Number(s).toFixed(3);
-    }
-    return s;
-  }
-  return '0.000';
+  if (/^\d+(\.\d+)?$/.test(s)) return s;
+  return '0';
 }
 
 // Decides between the two engines for one photo.

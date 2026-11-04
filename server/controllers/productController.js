@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const generateQR = require('../utils/generateQR');
 const { streamQrFile } = require('../utils/qrStorage');
 const { sendServerError } = require('../utils/errorResponse');
+const { previewProductDeletion, deleteProductCascade } = require('../utils/deletionService');
 
 // Matches the new GridFS-backed qrCodeUrl format (/api/qr/<fileId>). Older
 // products predate GridFS and still carry a /uploads/qr/... filesystem path
@@ -128,15 +129,64 @@ const updateProduct = async (req, res) => {
   }
 };
 
+// GET /api/products/group/delete-preview?name=...
+const previewProductGroup = async (req, res) => {
+  try {
+    const name = req.query.name;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Product name is required' });
+    }
+    const preview = await previewProductDeletion(name);
+    if (!preview) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({ success: true, preview });
+  } catch (err) {
+    sendServerError(res, err, 'productController:previewProductGroup');
+  }
+};
+
+// DELETE /api/products/group/:name
+const deleteProductGroup = async (req, res) => {
+  try {
+    const name = decodeURIComponent(req.params.name);
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Product name is required' });
+    }
+    const result = await deleteProductCascade(name, req.admin?._id);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({
+      success: true,
+      message: 'Product group and exclusive related records permanently deleted',
+      result,
+    });
+  } catch (err) {
+    sendServerError(res, err, 'productController:deleteProductGroup');
+  }
+};
+
 // DELETE /api/products/:id — superadmin only
 const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndDelete(req.params.id);
+    const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-    res.json({ success: true, message: 'Product deleted' });
+    const result = await deleteProductCascade(product.productName || product.productId, req.admin?._id);
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Product deleted', result });
   } catch (err) {
     sendServerError(res, err, 'productController');
   }
 };
 
-module.exports = { createProduct, getProducts, getProduct, downloadQR, updateProduct, deleteProduct };
+module.exports = {
+  createProduct,
+  getProducts,
+  getProduct,
+  downloadQR,
+  updateProduct,
+  deleteProduct,
+  previewProductGroup,
+  deleteProductGroup,
+};

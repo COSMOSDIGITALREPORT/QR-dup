@@ -8,6 +8,7 @@ const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 const { uploadQrPng, deleteQrFile } = require('../utils/qrStorage');
 const { sendServerError } = require('../utils/errorResponse');
+const { previewBatchDeletion, deleteBatchCascade } = require('../utils/deletionService');
 
 const { DETAIL_FIELDS, DETAIL_TEXT_MAX_LENGTH } = SeedBatch;
 
@@ -1201,6 +1202,42 @@ router.get('/:id/qr-list', protect, async (req, res) => {
     res.json({ success: true, packets: enrichedPackets });
   } catch (err) {
     sendServerError(res, err, 'batchRoutes');
+  }
+});
+
+// GET /api/batches/:id/delete-preview — preview related counts before permanent deletion
+router.get('/:id/delete-preview', protect, allowRoles('superadmin'), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid batch ID' });
+    }
+    const preview = await previewBatchDeletion(req.params.id);
+    if (!preview) {
+      return res.status(404).json({ success: false, message: 'Batch not found' });
+    }
+    res.json({ success: true, preview });
+  } catch (err) {
+    sendServerError(res, err, 'batchRoutes:delete-preview');
+  }
+});
+
+// DELETE /api/batches/:id — cascade delete batch and exclusive related records
+router.delete('/:id', protect, allowRoles('superadmin'), async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid batch ID' });
+    }
+    const result = await deleteBatchCascade(req.params.id, req.admin?._id);
+    if (!result) {
+      return res.status(404).json({ success: false, message: 'Batch not found' });
+    }
+    res.json({
+      success: true,
+      message: 'Batch and related records permanently deleted',
+      result,
+    });
+  } catch (err) {
+    sendServerError(res, err, 'batchRoutes:delete');
   }
 });
 

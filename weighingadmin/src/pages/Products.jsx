@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { batchAPI } from '../services/api';
+import { batchAPI, productAPI } from '../services/api';
 import {
   Box, Button, Card, Chip, Grid, IconButton, LinearProgress,
   Tab, Tabs, Table, TableBody, TableCell, TableContainer,
@@ -18,6 +18,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PageHeader from '../components/PageHeader';
@@ -96,6 +98,41 @@ export default function Products() {
   const [batchSelectDialog, setBatchSelectDialog] = useState(null);
   const [duplicateBatchId, setDuplicateBatchId] = useState(null);
   const [duplicateSelectDialog, setDuplicateSelectDialog] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { group, preview }
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleOpenDeleteDialog = async (group) => {
+    setDeleteTarget({ group, preview: null });
+    setDeleteError('');
+    setDeleteDialogOpen(true);
+    try {
+      const { data } = await productAPI.deleteGroupPreview(group.name);
+      if (data && data.preview) {
+        setDeleteTarget({ group, preview: data.preview });
+      }
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Could not load product preview');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.group?.name) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      await productAPI.deleteGroup(deleteTarget.group.name);
+      setSuccessMsg(`Product Group "${deleteTarget.group.name}" and associated records deleted permanently.`);
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+      fetchInventory();
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Failed to delete product group. Please check permissions.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   const handleOpenDuplicateProduct = (group) => {
     if (!group || !group.records || group.records.length === 0) return;
@@ -675,6 +712,19 @@ export default function Products() {
                         }}
                       >
                         Print QR
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteOutlineIcon />}
+                        onClick={() => handleOpenDeleteDialog(g)}
+                        sx={{
+                          borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                          borderColor: '#fca5a5', color: '#dc2626', px: 2,
+                          '&:hover': { borderColor: '#dc2626', background: 'rgba(220,38,38,0.04)' },
+                        }}
+                      >
+                        Delete
                       </Button>
                     </Box>
                   </Box>
@@ -1313,6 +1363,105 @@ export default function Products() {
           fetchInventory();
         }}
       />
+
+      {/* ── DELETE CONFIRMATION DIALOG ── */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deleteLoading && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1 }}>
+          <WarningAmberIcon sx={{ color: '#dc2626', fontSize: 28 }} />
+          <Typography sx={{ fontWeight: 800, fontSize: 18, color: '#0f172a' }}>
+            Delete Product Group
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ py: 2.5 }}>
+          <Typography sx={{ fontSize: 14, color: '#334155', mb: 2 }}>
+            Are you sure you want to permanently delete Product Group <strong>"{deleteTarget?.group?.name}"</strong>?
+          </Typography>
+
+          {deleteError && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+              {deleteError}
+            </Alert>
+          )}
+
+          <Box sx={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2, p: 2, mb: 2 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a', mb: 1.5 }}>
+              Product Details &amp; Cascade Scope:
+            </Typography>
+            <Grid container spacing={1.5}>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Product Name:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                  {deleteTarget?.group?.name || '—'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Category / Type:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                  {deleteTarget?.group?.category || '—'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Associated Batches:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
+                  {deleteTarget?.preview?.associatedBatchesCount ?? (deleteTarget?.group?.batches?.size || 0)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Associated QR Codes:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
+                  {deleteTarget?.preview?.associatedQrsCount ?? (deleteTarget?.group?.totalQrs || 0)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Exclusive Batches (Deleted):</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#dc2626' }}>
+                  {deleteTarget?.preview?.exclusiveBatchesCount ?? '—'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Shared Batches (Preserved):</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
+                  {deleteTarget?.preview?.sharedBatchesCount ?? '—'}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
+
+          <Alert severity="warning" sx={{ borderRadius: 2, fontSize: 12 }}>
+            <strong>Warning:</strong> Corresponding records in the desktop application and application-managed Excel workbooks (<code>Seed_Management.xlsx</code> and <code>YOY.xlsx</code>) will be removed on the next synchronization. This action cannot be undone.
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={deleteLoading}
+            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmDelete}
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlineIcon />}
+            sx={{
+              borderRadius: 2, textTransform: 'none', fontWeight: 700,
+              background: '#dc2626',
+              '&:hover': { background: '#b91c1c' },
+            }}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete Permanently'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={!!successMsg} autoHideDuration={5000} onClose={() => setSuccessMsg('')}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

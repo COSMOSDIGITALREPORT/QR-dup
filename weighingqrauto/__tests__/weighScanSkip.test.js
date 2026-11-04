@@ -179,12 +179,12 @@ describe('the four before/after combinations', () => {
     expect(api.saveAfterWeight).toHaveBeenCalledWith('tok', 'S1', 5);
     expect(api.linkSessionToPacket).toHaveBeenCalledWith('tok', 'S1', 'PKT-1');
     expect(seen.step3).toContain('Before: 1.20 kg');
-    expect(seen.step4).toContain('Difference: +3.80 kg');
+    expect(seen.step4).toContain('Difference: +3.800 kg');
     expect(seen.step5).toContain('After: 5.00 kg');
     expect(doneValue(r, 'Before')).toBe('1.20 kg');
     expect(doneValue(r, 'After')).toBe('5.00 kg');
-    expect(doneValue(r, 'Difference')).toBe('+3.80 kg');
-    expect(savedNotification().body).toBe('Before 1.20 kg · After 5.00 kg · Diff +3.80 kg');
+    expect(doneValue(r, 'Difference')).toBe('+3.800 kg');
+    expect(savedNotification().body).toBe('Before 1.200 kg · After 5.000 kg · Diff +3.800 kg');
   });
 
   test('2. before recorded, after skipped — the before weight kept, no difference', async () => {
@@ -198,7 +198,7 @@ describe('the four before/after combinations', () => {
     expect(doneValue(r, 'Before')).toBe('1.20 kg');
     expect(doneValue(r, 'After')).toBe('Skipped');
     expect(doneValue(r, 'Difference')).toBe('Not calculated');
-    expect(savedNotification().body).toBe('Before 1.20 kg · After skipped · Diff not calculated');
+    expect(savedNotification().body).toBe('Before 1.200 kg · After skipped · Diff not calculated');
     expect(showsZeroWeight(seen)).toBe(false);
   });
 
@@ -215,7 +215,7 @@ describe('the four before/after combinations', () => {
     expect(doneValue(r, 'Before')).toBe('Skipped');
     expect(doneValue(r, 'After')).toBe('5.00 kg');
     expect(doneValue(r, 'Difference')).toBe('Not calculated');
-    expect(savedNotification().body).toBe('Before skipped · After 5.00 kg · Diff not calculated');
+    expect(savedNotification().body).toBe('Before skipped · After 5.000 kg · Diff not calculated');
     expect(showsZeroWeight(seen)).toBe(false);
   });
 
@@ -333,7 +333,7 @@ describe('Skip buttons on the two weight steps', () => {
     await act(async () => { await camera.props.onReadCode({nativeEvent: {codeStringValue: 'PKT-1'}}); });
     // Resumes at the after weight, exactly as before.
     expect(hasText(r, 'Step 4 — After Weight')).toBe(true);
-    expect(screenText(r)).toContain('Before: 1.2 kg');
+    expect(screenText(r)).toContain('Before: 1.200 kg');
     await pressBack(r);
     await pressBack(r);
     await press(r, 'Skip Before Weight');
@@ -365,12 +365,12 @@ describe('history shows skipped weights as skipped', () => {
     let r;
     await act(async () => { r = create(<HistoryScreen />); });
     const text = screenText(r);
-    expect(text).toContain('+4.00 kg');
+    expect(text).toContain('+4.000 kg');
     expect(text).toContain('Before skipped');
     expect(text).toContain('After skipped');
     expect(text).toContain('Weights skipped');
-    expect(text).toContain('-1.00 kg');
-    expect(text).toContain('+1.50 kg'); // (4 + -1) / 2 — not (4 + 0 + 0 + 0 - 1) / 5
+    expect(text).toContain('-1.000 kg');
+    expect(text).toContain('+1.500 kg'); // (4 + -1) / 2 — not (4 + 0 + 0 + 0 - 1) / 5
     expect(text).toContain('5 entries');
 
     await press(r, 'Gain');
@@ -417,10 +417,10 @@ describe('weightSkip helpers', () => {
     expect(actualWeight('1.70')).toBe(1.7);
     expect(recordedWeight(null)).toBe('Skipped');
     expect(recordedWeight(undefined)).toBe('Skipped');
-    expect(recordedWeight(1.7)).toBe('1.70');
+    expect(recordedWeight(1.7)).toBe('1.700');
     expect(differenceLabel(null)).toBe('Not calculated');
-    expect(differenceLabel(-0.05)).toBe('-0.05 kg');
-    expect(differenceLabel(0)).toBe('+0.00 kg'); // a real zero difference is still shown
+    expect(differenceLabel(-0.05)).toBe('-0.050 kg');
+    expect(differenceLabel(0)).toBe('+0.000 kg'); // a real zero difference is still shown
   });
 
   test('labels, skip permission, notes, averages', () => {

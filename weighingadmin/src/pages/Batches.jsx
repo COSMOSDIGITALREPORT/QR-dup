@@ -19,6 +19,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import ImageIcon from '@mui/icons-material/Image';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import NewBatchDialog from '../components/NewBatchDialog';
@@ -70,6 +72,43 @@ export default function Batches() {
   const [duplicateBatchId, setDuplicateBatchId] = useState(null);
   const [packetSearch,  setPacketSearch]  = useState('');
   const [viewPhoto,     setViewPhoto]     = useState(null); // { url, label } | null
+
+  // Delete batch state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget,     setDeleteTarget]     = useState(null); // { batch, preview }
+  const [deleteLoading,    setDeleteLoading]    = useState(false);
+  const [deleteError,      setDeleteError]      = useState('');
+
+  const handleOpenDeleteDialog = async (batch) => {
+    setDeleteTarget({ batch, preview: null });
+    setDeleteError('');
+    setDeleteDialogOpen(true);
+    try {
+      const { data } = await batchAPI.deletePreview(batch._id);
+      if (data && data.preview) {
+        setDeleteTarget({ batch, preview: data.preview });
+      }
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Could not load batch preview');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.batch?._id) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      await batchAPI.delete(deleteTarget.batch._id);
+      setSuccessMsg(`Batch "${deleteTarget.batch.batchName}" and all associated records deleted permanently.`);
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+      fetchBatches();
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Failed to delete batch. Please check permissions.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   useEffect(() => { fetchBatches(); }, []);
 
@@ -582,6 +621,18 @@ export default function Batches() {
                       }}>
                       {printLoading[b._id] ? <CircularProgress size={14} color="inherit" /> : 'Print'}
                     </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<DeleteOutlineIcon />}
+                      onClick={() => handleOpenDeleteDialog(b)}
+                      sx={{
+                        borderRadius: 2, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                        borderColor: '#fecaca', color: '#dc2626', px: 1.8,
+                        '&:hover': { borderColor: '#dc2626', background: 'rgba(220,38,38,0.04)' },
+                      }}
+                    >
+                      Delete
+                    </Button>
                     <Tooltip title={`Download all ${b.count} QR codes`}>
                       <Button variant="contained"
                         onClick={() => downloadBatch(b)}
@@ -942,6 +993,102 @@ export default function Batches() {
           fetchBatches();
         }}
       />
+
+      {/* Delete Batch Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !deleteLoading && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.2, color: '#dc2626', fontWeight: 800, pb: 1 }}>
+          <WarningAmberIcon sx={{ fontSize: 28, color: '#dc2626' }} />
+          Delete Batch Permanently?
+        </DialogTitle>
+        <DialogContent dividers sx={{ pt: 2, pb: 2 }}>
+          {deleteError && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+              {deleteError}
+            </Alert>
+          )}
+          <Typography sx={{ fontSize: 14, color: '#334155', mb: 2 }}>
+            Are you sure you want to delete this batch? This action will remove the selected batch and its eligible related records from connected application storage.
+          </Typography>
+
+          <Box sx={{ background: '#f8fafc', p: 2, borderRadius: 2, border: '1px solid #e2e8f0', mb: 2 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a', mb: 1.5 }}>
+              Batch Details:
+            </Typography>
+            <Grid container spacing={1.5}>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Batch Name:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                  {deleteTarget?.batch?.batchName || '—'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Batch Number:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                  {deleteTarget?.batch?.batchNumber || '—'}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Associated Seed Entries:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
+                  {deleteTarget?.preview?.associatedSeedsCount ?? (deleteTarget?.batch?.seeds?.length || 1)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Associated QR Codes:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
+                  {deleteTarget?.preview?.associatedQrsCount ?? (deleteTarget?.batch?.count || 0)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Associated Packet Records:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
+                  {deleteTarget?.preview?.associatedPacketsCount ?? (deleteTarget?.batch?.count || 0)}
+                </Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography sx={{ fontSize: 11.5, color: '#64748b' }}>Associated Weighing Sessions:</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 700, color: '#1a227f' }}>
+                  {deleteTarget?.preview?.associatedSessionsCount ?? 0}
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
+
+          <Alert severity="warning" sx={{ borderRadius: 2, fontSize: 12 }}>
+            <strong>Warning:</strong> Corresponding records in the desktop application and application-managed Excel workbooks (<code>Seed_Management.xlsx</code> and <code>YOY.xlsx</code>) will be removed on the next synchronization. This cannot be undone.
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={deleteLoading}
+            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmDelete}
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={16} color="inherit" /> : <DeleteOutlineIcon />}
+            sx={{
+              borderRadius: 2, textTransform: 'none', fontWeight: 700,
+              background: '#dc2626',
+              '&:hover': { background: '#b91c1c' },
+            }}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete Permanently'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Snackbar open={!!successMsg} autoHideDuration={5000} onClose={() => setSuccessMsg('')}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

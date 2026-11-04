@@ -138,7 +138,7 @@ function createYoyWorkbookWriter({ filePath, dir }) {
   const targetPath = filePath || (dir ? path.join(dir, 'YOY.xlsx') : (fs.existsSync('D:\\dapatri argo\\YOY.xlsx') ? 'D:\\dapatri argo\\YOY.xlsx' : path.join(process.cwd(), 'YOY.xlsx')));
   const backupPath = targetPath.replace(/\.xlsx$/i, '.backup.xlsx');
 
-  async function write(packets = []) {
+  async function write(packets = [], deletedPacketIds = []) {
     let existingPacketsMap = new Map();
 
     // 1. Read existing workbook if present to preserve any extra offline rows
@@ -220,6 +220,15 @@ function createYoyWorkbookWriter({ filePath, dir }) {
         inserted++;
       }
       existingPacketsMap.set(pid, p);
+    }
+
+    // 2b. Remove deleted packets confirmed on backend
+    if (Array.isArray(deletedPacketIds) && deletedPacketIds.length > 0) {
+      for (const delId of deletedPacketIds) {
+        if (!delId) continue;
+        const cleanId = String(delId).trim();
+        existingPacketsMap.delete(cleanId);
+      }
     }
 
     // 3. Rebuild fresh workbook cleanly with frozen headers and correct columns

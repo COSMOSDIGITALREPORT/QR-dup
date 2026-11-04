@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const { rateLimit } = require('express-rate-limit');
 const DesktopSeedRecord = require('../models/DesktopSeedRecord');
 const SeedPacket = require('../models/SeedPacket');
+const DeletionTombstone = require('../models/DeletionTombstone');
 const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 const { sendServerError } = require('../utils/errorResponse');
@@ -119,6 +120,8 @@ const PACKET_SCAN_BATCH = 1000;
 const BATCH_SELECT = ['seedType', 'crop', 'year', 'warehouse', 'rack', 'shelf', ...BATCH_DETAIL_FIELDS].join(' ');
 
 const cleanText = (value) => (typeof value === 'string' && value.trim().length <= TEXT_MAX_LENGTH ? value.trim() : '');
+
+const canQueryTombstone = () => Boolean((mongoose.connection && mongoose.connection.readyState === 1) || (DeletionTombstone.find !== mongoose.Model.find));
 
 // The seed-management details saved with the batch, for the columns that
 // have one. A column is set only when the batch really holds a value of the
@@ -372,9 +375,32 @@ router.get('/', desktopRecordLimiter, async (req, res) => {
     const page = hasMore ? docs.slice(0, limit) : docs;
     const last = page[page.length - 1];
 
+    let deletedRecordIds = [];
+    if (canQueryTombstone()) {
+      if (since !== undefined) {
+        const sinceDate = typeof since === 'string' ? new Date(since) : new Date(NaN);
+        if (!isNaN(sinceDate)) {
+          const tombstones = await DeletionTombstone.find({ createdAt: { $gt: sinceDate } }).select('deletedDesktopRecordIds').lean();
+          for (const t of tombstones) {
+            if (Array.isArray(t.deletedDesktopRecordIds)) {
+              deletedRecordIds.push(...t.deletedDesktopRecordIds);
+            }
+          }
+        }
+      } else {
+        const tombstones = await DeletionTombstone.find({}).select('deletedDesktopRecordIds').lean();
+        for (const t of tombstones) {
+          if (Array.isArray(t.deletedDesktopRecordIds)) {
+            deletedRecordIds.push(...t.deletedDesktopRecordIds);
+          }
+        }
+      }
+    }
+
     res.json({
       success: true,
       records: page.map(toPublic),
+      deletedRecordIds: Array.from(new Set(deletedRecordIds)),
       hasMore,
       nextCursor: last
         ? { since: new Date(last.updatedAt).toISOString(), afterId: String(last._id) }
@@ -438,10 +464,21 @@ router.get('/yoy-sync', desktopRecordLimiter, async (req, res) => {
       };
     });
 
+    const deletedPacketIds = [];
+    if (canQueryTombstone()) {
+      const tombstones = await DeletionTombstone.find({}).select('deletedPacketUniqueIds').lean();
+      for (const t of tombstones) {
+        if (Array.isArray(t.deletedPacketUniqueIds)) {
+          deletedPacketIds.push(...t.deletedPacketUniqueIds);
+        }
+      }
+    }
+
     res.json({
       success: true,
       count: rows.length,
       packets: rows,
+      deletedPacketIds: Array.from(new Set(deletedPacketIds)),
     });
   } catch (err) {
     sendServerError(res, err, 'desktopRecordRoutes:yoy-sync');

@@ -61,6 +61,20 @@ function createRecordStore({ filePath, file = createJsonFile(filePath, () => ({}
       save();
     },
 
+    // Removes records confirmed deleted on the backend
+    deleteMany(recordIds) {
+      if (!Array.isArray(recordIds) || !recordIds.length) return 0;
+      let removed = 0;
+      for (const id of recordIds) {
+        if (state.records[id]) {
+          delete state.records[id];
+          removed += 1;
+        }
+      }
+      if (removed) save();
+      return removed;
+    },
+
     getCursor: () => state.cursor,
     setCursor(cursor) { state.cursor = cursor; save(); },
 
